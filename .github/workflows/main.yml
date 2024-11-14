@@ -12,34 +12,47 @@ jobs:
       - name: "apt update"
         run: sudo apt-get update
       - name: "install compiler and build tools"
-        run: sudo apt-get install build-essential
+        run: sudo apt-get install build-essential -y
 
       - name: create build directory
         working-directory: ./ACE
         run: mkdir build
 
-      # TODO: run unit tests on android emulator
-      # debug
+      # Debug build
       - name: debug build
         working-directory: ./ACE/build
         run: |
           cmake -DCMAKE_BUILD_TYPE=Debug ../
-          make -j${nproc}
+          make -j$(nproc)
 
       - name: debug unit test
         working-directory: ./ACE/build
         run: ./test/test_ace -s
 
-      # release
+      - name: upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: ace-debug
+          path: ./ACE/build/*
+
+      # Release build
       - name: release build
         working-directory: ./ACE/build
         run: |
           cmake -DCMAKE_BUILD_TYPE=Release ../ 
-          make -j${nproc}
+          make -j$(nproc)
 
       - name: release unit test
         working-directory: ./ACE/build
         run: ./test/test_ace -s
+
+      - name: upload release artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: ace-release
+          path: ./ACE/build/*
 
   Modder-linux:
     runs-on: ubuntu-22.04
@@ -49,8 +62,8 @@ jobs:
           submodules: "true"
       - name: "apt update"
         run: sudo apt-get update
-      - name: "install build dependecies"
-        run: sudo apt-get install openjdk-17-jdk-headless apktool gradle
+      - name: "install build dependencies"
+        run: sudo apt-get install openjdk-17-jdk-headless apktool gradle -y
 
       - name: generating code for injection
         working-directory: ./Modder/injector
@@ -58,13 +71,19 @@ jobs:
 
       - name: build
         working-directory: ./Modder
-        # only build no testing
         run: ./gradlew build -x test
 
       - name: test
         working-directory: ./Modder
-        # only build no testing
         run: ./gradlew test
+
+      - name: upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: modder-linux
+          path: ./Modder/build/libs/*
+
   Modder-windows:
     runs-on: windows-2022
     steps:
@@ -89,19 +108,22 @@ jobs:
 
       - name: generating code for injection
         working-directory: ./Modder/injector
-        run: python3 ./gen_smali.py
+        run: python ./gen_smali.py
 
       - name: build
         working-directory: ./Modder
-        # only build no testing
         run: ./gradlew build -x test
 
       - name: test
         working-directory: ./Modder
-        # only build no testing
         run: ./gradlew test
 
-  
+      - name: upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: modder-windows
+          path: ./Modder/build/libs/*
 
   ATG:
     runs-on: ubuntu-22.04
@@ -112,25 +134,25 @@ jobs:
 
       - name: "apt update"
         run: sudo apt-get update
-      - name: "install build dependecies"
-        run: sudo apt-get install openjdk-17-jdk-headless fd-find
+      - name: "install build dependencies"
+        run: sudo apt-get install openjdk-17-jdk-headless fd-find -y
 
       - name: "setup JAVA_HOME to java 17"
-        working-directory: /usr/lib/jvm
-        # find where java-17 is at /usr/lib/jvm then set JAVA_HOME to its path
-        # https://stackoverflow.com/questions/57968497/how-do-i-set-an-env-var-with-a-bash-expression-in-github-actions
         run: |
-          fdfind java-17 | xargs readlink -f | awk '{print "JAVA_HOME="$1""}' >> $GITHUB_ENV
-          echo $JAVA_HOME
+          JAVA_HOME=$(fdfind java-17 /usr/lib/jvm | xargs readlink -f)
+          echo "JAVA_HOME=${JAVA_HOME}" >> $GITHUB_ENV
+          echo "JAVA_HOME set to ${JAVA_HOME}"
 
       - name: build
         working-directory: ./ATG
-        # only build no testing
-        run: |
-          echo $JAVA_HOME
-          ./gradlew assembleDebug
-      # TODO: run unit tests both pure unit tests and instrumented one
+        run: ./gradlew assembleDebug
 
+      - name: upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: atg
+          path: ./ATG/app/build/outputs/apk/debug/*
 
   billing-hack:
     runs-on: ubuntu-22.04
@@ -139,21 +161,24 @@ jobs:
         with:
           submodules: "true"
 
-          
       - name: "apt update"
         run: sudo apt-get update
-      - name: "install build dependecies"
-        run: sudo apt-get install openjdk-17-jdk-headless fd-find
+      - name: "install build dependencies"
+        run: sudo apt-get install openjdk-17-jdk-headless fd-find -y
 
       - name: "setup JAVA_HOME to java 17"
-        working-directory: /usr/lib/jvm
-        # find where java-17 is at /usr/lib/jvm then set JAVA_HOME to its path
-        # https://stackoverflow.com/questions/57968497/how-do-i-set-an-env-var-with-a-bash-expression-in-github-actions
         run: |
-          fdfind java-17 | xargs readlink -f | awk '{print "JAVA_HOME="$1""}' >> $GITHUB_ENV
-          echo $JAVA_HOME
+          JAVA_HOME=$(fdfind java-17 /usr/lib/jvm | xargs readlink -f)
+          echo "JAVA_HOME=${JAVA_HOME}" >> $GITHUB_ENV
+          echo "JAVA_HOME set to ${JAVA_HOME}"
 
       - name: build
         working-directory: ./billing-hack
-        # only build no testing
         run: ./gradlew assembleDebug
+
+      - name: upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: billing-hack
+          path: ./billing-hack/build/outputs/apk/debug/*
