@@ -18,7 +18,7 @@ keytool -help
 
 ### Базовая команда
 ```bash
-keytool -genkey -v -keystore app-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias app-key
+keytool -genkey -v -keystore app-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias app-key -sigalg SHA256withRSA
 ```
 
 ### Подробная команда с параметрами
@@ -31,7 +31,8 @@ keytool -genkeypair \
   -validity 10000 \
   -alias app-key \
   -storetype JKS \
-  -dname "CN=YourName, OU=YourOrgUnit, O=YourOrg, L=YourCity, ST=YourState, C=YourCountry"
+  -dname "CN=YourName, OU=YourOrgUnit, O=YourOrg, L=YourCity, ST=YourState, C=YourCountry" \
+  -sigalg SHA256withRSA
 ```
 
 ## Интерактивная генерация
@@ -78,7 +79,8 @@ keytool -genkeypair \
   -keysize 2048 \
   -validity 10000 \
   -alias my-app \
-  -dname "CN=Developer, OU=Mobile, O=MyCompany, L=Moscow, ST=Moscow, C=RU"
+  -dname "CN=Developer, OU=Mobile, O=MyCompany, L=Moscow, ST=Moscow, C=RU" \
+  -sigalg SHA256withRSA
 ```
 
 ### Для корпоративного использования
@@ -90,7 +92,8 @@ keytool -genkeypair \
   -keysize 4096 \
   -validity 25000 \
   -alias company-app \
-  -dname "CN=Company Developer, OU=Mobile Development, O=Company Ltd, L=City, ST=Region, C=RU"
+  -dname "CN=Company Developer, OU=Mobile Development, O=Company Ltd, L=City, ST=Region, C=RU" \
+  -sigalg SHA256withRSA
 ```
 
 ## Параметры команды
@@ -104,6 +107,7 @@ keytool -genkeypair \
 - `-alias` - псевдоним для ключа
 - `-storetype JKS` - тип keystore (JKS по умолчанию)
 - `-dname` - Distinguished Name для сертификата
+- `-sigalg SHA256withRSA` - алгоритм подписи (рекомендуется для безопасности)
 
 ## Проверка созданного keystore
 
@@ -158,12 +162,14 @@ keytool -import -alias trusted-cert -file certificate.crt -keystore app-release-
 3. **Безопасность**: Не передавайте keystore по незащищенным каналам
 4. **Срок действия**: Устанавливайте долгий срок действия (25+ лет)
 5. **Размер ключа**: Используйте 2048 или 4096 бит для безопасности
+6. **Алгоритмы**: Всегда используйте SHA256withRSA вместо SHA1 для безопасности
+7. **Тип хранилища**: Рекомендуется использовать PKCS12 вместо JKS
 
 ## Пример полного процесса
 
 ```bash
 # 1. Генерация keystore
-keytool -genkeypair -v -keystore my-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-app-key
+keytool -genkeypair -v -keystore my-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-app-key -sigalg SHA256withRSA
 
 # 2. Проверка
 keytool -list -v -keystore my-release-key.jks

@@ -2,9 +2,9 @@
 
 ## Создание keystore с помощью keytool
 
-1. Создайте keystore файл:
+1. Создайте keystore файл с современными алгоритмами:
 ```bash
-keytool -genkey -v -keystore app-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias app-key
+keytool -genkey -v -keystore app-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias app-key -sigalg SHA256withRSA -storetype PKCS12
 ```
 
 2. Следуйте инструкциям для заполнения информации:
@@ -65,3 +65,24 @@ keytool -list -v -keystore app-release-key.jks
 - Используйте сильные пароли для keystore и ключей
 - Сохраните резервную копию keystore файла
 - Не добавляйте keystore файл в git repository
+
+## Решение распространенных проблем
+
+### Ошибка "SHA1 algorithm is considered a security risk"
+Эта ошибка возникает при использовании устаревших алгоритмов. Решение:
+- Используйте `-sigalg SHA256withRSA -digestalg SHA256` при подписи
+- Создавайте keystore с `-sigalg SHA256withRSA`
+
+### Ошибка "invalid SHA-256 signature file digest"
+Эта ошибка возникает, когда APK уже подписан. Решение:
+1. Удалите существующие подписи перед повторной подписью:
+```bash
+zip -d app.apk "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.DSA" "META-INF/MANIFEST.MF"
+```
+2. Затем подпишите APK заново
+
+### Рекомендации по zipalign
+После подписи APK рекомендуется выполнить zipalign:
+```bash
+zipalign -v 4 app-signed.apk app-final.apk
+```
