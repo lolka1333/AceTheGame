@@ -40,7 +40,9 @@ zip -d "$APK_FILE" "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.DSA" "META-INF/M
 
 # Additional cleanup for any remaining signature files
 echo "Performing thorough signature cleanup..."
-unzip -l "$APK_FILE" | grep -E 'META-INF/.*\.(SF|RSA|DSA)$' | awk '{print $4}' | xargs -I {} zip -d "$APK_FILE" {} 2>/dev/null || true
+unzip -Z1 "$APK_FILE" 2>/dev/null | grep -E '^META-INF/.*\.(SF|RSA|DSA)$' | while IFS= read -r file; do
+    [ -n "$file" ] && zip -d "$APK_FILE" "$file" 2>/dev/null || true
+done
 
 # Sign the APK
 echo "Signing APK..."
