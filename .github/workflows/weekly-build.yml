@@ -81,15 +81,32 @@ jobs:
           ./gradlew build -x test
           cd ..
           
+          # Setup keystore for signing
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./ATG/app/release.keystore
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./billing-hack/app/release.keystore
+            echo "Using keystore from secrets"
+          else
+            echo "No keystore secret found, using local keystore"
+          fi
+          
           # Build ATG
           cd ATG
           ./gradlew assembleDebug
+          KEYSTORE_FILE=release.keystore \
+          KEYSTORE_PASSWORD="${{ secrets.KEYSTORE_PASSWORD || 'android' }}" \
+          KEY_ALIAS="${{ secrets.KEY_ALIAS || 'androiddebugkey' }}" \
+          KEY_PASSWORD="${{ secrets.KEY_PASSWORD || 'android' }}" \
           ./gradlew assembleRelease
           cd ..
           
           # Build Billing Hack
           cd billing-hack
           ./gradlew assembleDebug
+          KEYSTORE_FILE=release.keystore \
+          KEYSTORE_PASSWORD="${{ secrets.KEYSTORE_PASSWORD || 'android' }}" \
+          KEY_ALIAS="${{ secrets.KEY_ALIAS || 'androiddebugkey' }}" \
+          KEY_PASSWORD="${{ secrets.KEY_PASSWORD || 'android' }}" \
           ./gradlew assembleRelease
           cd ..
 
