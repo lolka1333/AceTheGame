@@ -26,14 +26,14 @@ android {
                 // Fallback to local release keystore
                 storeFile file('release.keystore')
                 storePassword 'android'
-                keyAlias 'mykey'
+                keyAlias 'androiddebugkey'
                 keyPassword 'android'
             }
         }
         debug {
             storeFile file('release.keystore')
             storePassword 'android'
-            keyAlias 'mykey'
+            keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
     }

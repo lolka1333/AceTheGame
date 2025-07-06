@@ -178,8 +178,12 @@ jobs:
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./ATG/app/release.keystore
             echo "Using keystore from secrets"
+            echo "Keystore info:"
+            keytool -list -v -keystore ./ATG/app/release.keystore -storepass ${{ secrets.KEYSTORE_PASSWORD || 'android' }} || echo "Failed to read keystore"
           else
             echo "No keystore secret found, using local keystore"
+            echo "Local keystore info:"
+            keytool -list -v -keystore ./ATG/app/release.keystore -storepass android || echo "Failed to read local keystore"
           fi
 
       - name: build release
@@ -189,7 +193,13 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'android' }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'androiddebugkey' }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
-        run: ./gradlew assembleRelease
+        run: |
+          echo "Building with signing config:"
+          echo "KEYSTORE_FILE: $KEYSTORE_FILE"
+          echo "KEY_ALIAS: $KEY_ALIAS"
+          echo "Using keystore password: $(echo $KEYSTORE_PASSWORD | sed 's/./*/g')"
+          echo "Using key password: $(echo $KEY_PASSWORD | sed 's/./*/g')"
+          ./gradlew assembleRelease
 
       - name: build debug (for regular builds)
         if: github.event_name != 'release' && github.event_name != 'workflow_dispatch'
@@ -240,8 +250,12 @@ jobs:
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./billing-hack/app/release.keystore
             echo "Using keystore from secrets"
+            echo "Keystore info:"
+            keytool -list -v -keystore ./billing-hack/app/release.keystore -storepass ${{ secrets.KEYSTORE_PASSWORD || 'android' }} || echo "Failed to read keystore"
           else
             echo "No keystore secret found, using local keystore"
+            echo "Local keystore info:"
+            keytool -list -v -keystore ./billing-hack/app/release.keystore -storepass android || echo "Failed to read local keystore"
           fi
 
       - name: build release
@@ -251,7 +265,13 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'android' }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'androiddebugkey' }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
-        run: ./gradlew assembleRelease
+        run: |
+          echo "Building with signing config:"
+          echo "KEYSTORE_FILE: $KEYSTORE_FILE"
+          echo "KEY_ALIAS: $KEY_ALIAS"
+          echo "Using keystore password: $(echo $KEYSTORE_PASSWORD | sed 's/./*/g')"
+          echo "Using key password: $(echo $KEY_PASSWORD | sed 's/./*/g')"
+          ./gradlew assembleRelease
 
       - name: build debug (for regular builds)
         if: github.event_name != 'release' && github.event_name != 'workflow_dispatch'
