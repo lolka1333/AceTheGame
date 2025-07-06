@@ -23,12 +23,18 @@ android {
                 keyAlias KEY_ALIAS
                 keyPassword KEY_PASSWORD
             } else {
-                // Fallback to local keystore for local development
+                // Fallback to local release keystore
                 storeFile file('release.keystore')
                 storePassword 'android'
                 keyAlias 'androiddebugkey'
                 keyPassword 'android'
             }
+        }
+        debug {
+            storeFile file('release.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
         }
     }
 
@@ -37,6 +43,9 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.debug
         }
     }
 
