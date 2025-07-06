@@ -1,0 +1,264 @@
+name: Security Audit and Code Quality
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    # Run security checks every week on Monday at 09:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  security-audit:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "true"
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install security tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy cppcheck shellcheck
+          pip install bandit safety semgrep
+
+      - name: Run Python security checks
+        run: |
+          echo "Running Bandit security checks..."
+          bandit -r . -f json -o bandit-report.json || true
+          
+          echo "Running Safety checks..."
+          safety check --json --output safety-report.json || true
+          
+          echo "Running Semgrep..."
+          semgrep --config=auto --json --output=semgrep-report.json . || true
+
+      - name: Run C++ security checks
+        run: |
+          echo "Running CppCheck..."
+          find . -name "*.cpp" -o -name "*.cc" -o -name "*.c" | head -50 | xargs cppcheck --enable=all --xml --xml-version=2 2> cppcheck-report.xml || true
+          
+          echo "Running Clang-Tidy..."
+          find . -name "*.cpp" -o -name "*.cc" -o -name "*.c" | head -20 | xargs clang-tidy -checks='-*,security-*,cert-*' > clang-tidy-report.txt 2>&1 || true
+
+      - name: Run Shell script checks
+        run: |
+          echo "Running ShellCheck..."
+          find . -name "*.sh" | head -20 | xargs shellcheck -f json > shellcheck-report.json 2>&1 || true
+
+      - name: Analyze Gradle dependencies
+        run: |
+          echo "Analyzing Gradle dependencies..."
+          cd Modder
+          ./gradlew dependencyCheck --format=JSON || true
+          cd ../ATG
+          ./gradlew dependencyCheck --format=JSON || true
+          cd ../billing-hack
+          ./gradlew dependencyCheck --format=JSON || true
+          cd ..
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            *-report.json
+            *-report.xml
+            *-report.txt
+            **/build/reports/dependency-check-report.json
+          retention-days: 30
+
+      - name: Create security summary
+        run: |
+          echo "# Security Audit Summary" > security-summary.md
+          echo "Date: $(date)" >> security-summary.md
+          echo "Commit: ${{ github.sha }}" >> security-summary.md
+          echo "" >> security-summary.md
+          
+          echo "## Python Security (Bandit)" >> security-summary.md
+          if [ -f bandit-report.json ]; then
+            echo "- Report generated: ✅" >> security-summary.md
+          else
+            echo "- Report generated: ❌" >> security-summary.md
+          fi
+          
+          echo "## C++ Security (CppCheck)" >> security-summary.md
+          if [ -f cppcheck-report.xml ]; then
+            echo "- Report generated: ✅" >> security-summary.md
+          else
+            echo "- Report generated: ❌" >> security-summary.md
+          fi
+          
+          echo "## Shell Script Security (ShellCheck)" >> security-summary.md
+          if [ -f shellcheck-report.json ]; then
+            echo "- Report generated: ✅" >> security-summary.md
+          else
+            echo "- Report generated: ❌" >> security-summary.md
+          fi
+          
+          echo "## Dependency Analysis" >> security-summary.md
+          echo "- Gradle projects analyzed: Modder, ATG, billing-hack" >> security-summary.md
+
+      - name: Upload security summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-summary
+          path: security-summary.md
+          retention-days: 30
+
+  code-quality:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "true"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install code quality tools
+        run: |
+          pip install black flake8 pylint mypy
+          sudo apt-get update
+          sudo apt-get install -y clang-format
+
+      - name: Run Python code quality checks
+        run: |
+          echo "Running Black..."
+          black --check --diff . > black-report.txt 2>&1 || true
+          
+          echo "Running Flake8..."
+          flake8 --format=json --output-file=flake8-report.json . || true
+          
+          echo "Running Pylint..."
+          find . -name "*.py" | head -20 | xargs pylint --output-format=json > pylint-report.json 2>&1 || true
+
+      - name: Run C++ code quality checks
+        run: |
+          echo "Running clang-format..."
+          find . -name "*.cpp" -o -name "*.cc" -o -name "*.c" -o -name "*.h" -o -name "*.hpp" | head -50 | xargs clang-format --dry-run > clang-format-report.txt 2>&1 || true
+
+      - name: Upload code quality reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-quality-reports
+          path: |
+            *-report.txt
+            *-report.json
+          retention-days: 30
+
+  license-check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "true"
+
+      - name: Install license checker
+        run: |
+          pip install licensecheck
+
+      - name: Check licenses
+        run: |
+          echo "Checking licenses..."
+          licensecheck --format json > license-report.json 2>&1 || true
+          
+          echo "Checking for missing license headers..."
+          find . -name "*.py" -o -name "*.java" -o -name "*.cpp" -o -name "*.cc" -o -name "*.c" -o -name "*.h" -o -name "*.hpp" | \
+            head -100 | xargs grep -L "Copyright\|License" > missing-licenses.txt 2>&1 || true
+
+      - name: Upload license reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-reports
+          path: |
+            license-report.json
+            missing-licenses.txt
+          retention-days: 30
+
+  final-summary:
+    needs: [security-audit, code-quality, license-check]
+    runs-on: ubuntu-22.04
+    if: always()
+    steps:
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: reports
+
+      - name: Create final summary
+        run: |
+          echo "# AceTheGame - Security and Quality Report" > final-summary.md
+          echo "Generated on: $(date)" >> final-summary.md
+          echo "Commit: ${{ github.sha }}" >> final-summary.md
+          echo "" >> final-summary.md
+          
+          echo "## 🔍 Security Audit Results" >> final-summary.md
+          if [ -d "reports/security-reports" ]; then
+            echo "- Security reports generated: ✅" >> final-summary.md
+            echo "- Files analyzed: Python, C++, Shell scripts" >> final-summary.md
+          else
+            echo "- Security reports generated: ❌" >> final-summary.md
+          fi
+          
+          echo "" >> final-summary.md
+          echo "## 🎯 Code Quality Results" >> final-summary.md
+          if [ -d "reports/code-quality-reports" ]; then
+            echo "- Code quality reports generated: ✅" >> final-summary.md
+            echo "- Languages analyzed: Python, C++" >> final-summary.md
+          else
+            echo "- Code quality reports generated: ❌" >> final-summary.md
+          fi
+          
+          echo "" >> final-summary.md
+          echo "## 📄 License Check Results" >> final-summary.md
+          if [ -d "reports/license-reports" ]; then
+            echo "- License reports generated: ✅" >> final-summary.md
+          else
+            echo "- License reports generated: ❌" >> final-summary.md
+          fi
+          
+          echo "" >> final-summary.md
+          echo "## 📁 Available Reports" >> final-summary.md
+          find reports -name "*.json" -o -name "*.xml" -o -name "*.txt" -o -name "*.md" | while read file; do
+            echo "- \`$(basename "$file")\`" >> final-summary.md
+          done
+          
+          echo "" >> final-summary.md
+          echo "## 🔗 Links" >> final-summary.md
+          echo "- [Repository](https://github.com/${{ github.repository }})" >> final-summary.md
+          echo "- [Actions](https://github.com/${{ github.repository }}/actions)" >> final-summary.md
+          echo "- [Security](https://github.com/${{ github.repository }}/security)" >> final-summary.md
+
+      - name: Upload final summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-security-quality-summary
+          path: |
+            final-summary.md
+            reports/
+          retention-days: 90

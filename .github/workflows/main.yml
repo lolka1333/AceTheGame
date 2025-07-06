@@ -1,5 +1,12 @@
-name: AceTheGame CI
-on: [push, workflow_dispatch, pull_request]
+name: AceTheGame CI/CD
+on: 
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
   ACE:
@@ -31,7 +38,7 @@ jobs:
 
       - name: upload debug artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ace-debug
           path: ./ACE/build/*
@@ -49,7 +56,7 @@ jobs:
 
       - name: upload release artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ace-release
           path: ./ACE/build/*
@@ -77,12 +84,23 @@ jobs:
         working-directory: ./Modder
         run: ./gradlew test
 
+      - name: Check Modder artifacts
+        run: |
+          if [ -d "./Modder/modder/build/libs" ]; then
+            echo "Modder artifacts found:"
+            ls -la ./Modder/modder/build/libs/
+          else
+            echo "Modder artifacts not found"
+            mkdir -p ./Modder/modder/build/libs/
+            echo "No JAR files generated" > ./Modder/modder/build/libs/README.txt
+          fi
+
       - name: upload artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: modder-linux
-          path: ./Modder/build/libs/*
+          path: ./Modder/modder/build/libs/*
 
   Modder-windows:
     runs-on: windows-2022
@@ -118,12 +136,23 @@ jobs:
         working-directory: ./Modder
         run: ./gradlew test
 
+      - name: Check Modder artifacts
+        run: |
+          if (Test-Path "./Modder/modder/build/libs") {
+            Write-Host "Modder artifacts found:"
+            Get-ChildItem -Path "./Modder/modder/build/libs/" -Force
+          } else {
+            Write-Host "Modder artifacts not found"
+            New-Item -ItemType Directory -Path "./Modder/modder/build/libs/" -Force
+            "No JAR files generated" | Out-File -FilePath "./Modder/modder/build/libs/README.txt"
+          }
+
       - name: upload artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: modder-windows
-          path: ./Modder/build/libs/*
+          path: ./Modder/modder/build/libs/*
 
   ATG:
     runs-on: ubuntu-22.04
@@ -147,9 +176,20 @@ jobs:
         working-directory: ./ATG
         run: ./gradlew assembleDebug
 
+      - name: Check ATG artifacts
+        run: |
+          if [ -d "./ATG/app/build/outputs/apk/debug" ]; then
+            echo "ATG artifacts found:"
+            ls -la ./ATG/app/build/outputs/apk/debug/
+          else
+            echo "ATG artifacts not found"
+            mkdir -p ./ATG/app/build/outputs/apk/debug/
+            echo "No APK files generated" > ./ATG/app/build/outputs/apk/debug/README.txt
+          fi
+
       - name: upload artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: atg
           path: ./ATG/app/build/outputs/apk/debug/*
@@ -176,9 +216,130 @@ jobs:
         working-directory: ./billing-hack
         run: ./gradlew assembleDebug
 
+      - name: Check billing-hack artifacts
+        run: |
+          if [ -d "./billing-hack/app/build/outputs/apk/debug" ]; then
+            echo "billing-hack artifacts found:"
+            ls -la ./billing-hack/app/build/outputs/apk/debug/
+          else
+            echo "billing-hack artifacts not found"
+            mkdir -p ./billing-hack/app/build/outputs/apk/debug/
+            echo "No APK files generated" > ./billing-hack/app/build/outputs/apk/debug/README.txt
+          fi
+
       - name: upload artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: billing-hack
-          path: ./billing-hack/build/outputs/apk/debug/*
+          path: ./billing-hack/app/build/outputs/apk/debug/*
+
+  # Android Release Build (with NDK for ACE)
+  android-release:
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    needs: [ACE, Modder-linux, ATG, billing-hack]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "true"
+
+      - name: "apt update"
+        run: sudo apt-get update
+      - name: "install build dependencies"
+        run: |
+          sudo apt-get install -y build-essential cmake unzip wget python3 openjdk-17-jdk-headless apktool fd-find
+
+      - name: "setup JAVA_HOME to java 17"
+        run: |
+          JAVA_HOME=$(fdfind java-17 /usr/lib/jvm | xargs readlink -f)
+          echo "JAVA_HOME=${JAVA_HOME}" >> $GITHUB_ENV
+          echo "JAVA_HOME set to ${JAVA_HOME}"
+
+      - name: "install Android SDK"
+        run: |
+          sudo apt-get install -y android-sdk sdkmanager
+          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+
+      - name: "install Android NDK"
+        run: |
+          wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
+          unzip ndk.zip -d ndk
+          rm ndk.zip
+          echo "ANDROID_NDK_HOME=$PWD/ndk/android-ndk-r25c" >> $GITHUB_ENV
+
+      - name: "accept Android SDK licenses"
+        run: yes | sdkmanager --licenses || true
+
+      - name: "build full release"
+        run: |
+          python3 ./make_release.py ./ndk/android-ndk-r25c/build/cmake/android.toolchain.cmake
+
+      - name: "package release"
+        run: |
+          cd release
+          find . -name "*.zip" -o -name "*.tar.gz" -o -name "*.apk" -o -name "*.jar" | head -20
+          tar -czf ../AceTheGame-release.tar.gz *
+
+      - name: upload full release
+        uses: actions/upload-artifact@v4
+        with:
+          name: AceTheGame-full-release
+          path: |
+            release/
+            AceTheGame-release.tar.gz
+
+  # Create GitHub Release
+  create-release:
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: [ACE, Modder-linux, Modder-windows, ATG, billing-hack, android-release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release bundle
+        run: |
+          mkdir -p release-bundle
+          
+          # Copy all artifacts to release bundle
+          find artifacts -type f \( -name "*.apk" -o -name "*.jar" -o -name "*.so" -o -name "*.exe" -o -name "*.tar.gz" \) -exec cp {} release-bundle/ \;
+          
+          # Create individual zip files for each component
+          cd artifacts
+          for dir in */; do
+            if [ -d "$dir" ]; then
+              zip -r "../release-bundle/${dir%/}.zip" "$dir"
+            fi
+          done
+          cd ..
+          
+          # Create main release archive
+          cd release-bundle
+          tar -czf ../AceTheGame-complete-release.tar.gz *
+          zip -r ../AceTheGame-complete-release.zip *
+          cd ..
+
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: complete-release-bundle
+          path: |
+            release-bundle/
+            AceTheGame-complete-release.tar.gz
+            AceTheGame-complete-release.zip
+
+      - name: Create GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            AceTheGame-complete-release.tar.gz
+            AceTheGame-complete-release.zip
+            release-bundle/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

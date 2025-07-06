@@ -1,0 +1,141 @@
+name: Docker Multi-Platform Build
+
+on:
+  push:
+    tags: [ 'v*.*.*' ]
+  workflow_dispatch:
+  schedule:
+    # Run monthly on the 1st at 04:00 UTC
+    - cron: '0 4 1 * *'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-multiplatform:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "true"
+
+      - name: Free up maximum disk space
+        run: |
+          echo "Before cleanup:"
+          df -h
+          
+          # Remove unnecessary packages and files
+          sudo rm -rf /usr/local/lib/android/sdk
+          sudo rm -rf /opt/hostedtoolcache
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/go
+          sudo rm -rf /opt/microsoft
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /var/lib/gems
+          
+          # Clean APT cache
+          sudo apt-get clean
+          sudo apt-get autoclean
+          sudo apt-get autoremove -y
+          
+          # Clean Docker
+          docker system prune -a -f
+          
+          # Clean snap
+          sudo snap list --all | awk '/disabled/{print $1, $3}' | while read snapname revision; do sudo snap remove "$snapname" --revision="$revision"; done
+          
+          echo "After cleanup:"
+          df -h
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch,suffix=-multiplatform
+            type=ref,event=pr,suffix=-multiplatform
+            type=semver,pattern={{version}},suffix=-multiplatform
+            type=semver,pattern={{major}}.{{minor}},suffix=-multiplatform
+            type=semver,pattern={{major}},suffix=-multiplatform
+            type=sha,suffix=-multiplatform
+            type=raw,value=latest-multiplatform,enable={{is_default_branch}}
+
+      - name: Build and push multi-platform Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=image,push=true
+
+      - name: Test multi-platform images
+        run: |
+          echo "Testing AMD64 image:"
+          docker run --rm --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}-multiplatform python3 --version
+          
+          echo "Testing ARM64 image:"
+          docker run --rm --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}-multiplatform python3 --version
+
+      - name: Create manifest summary
+        run: |
+          echo "# Multi-Platform Docker Build Summary" > docker-summary.md
+          echo "Build Date: $(date)" >> docker-summary.md
+          echo "Commit: ${{ github.sha }}" >> docker-summary.md
+          echo "" >> docker-summary.md
+          echo "## Built Images" >> docker-summary.md
+          echo "- Platform: linux/amd64, linux/arm64" >> docker-summary.md
+          echo "- Registry: ${{ env.REGISTRY }}" >> docker-summary.md
+          echo "- Image: ${{ env.IMAGE_NAME }}" >> docker-summary.md
+          echo "" >> docker-summary.md
+          echo "## Tags" >> docker-summary.md
+          echo '${{ steps.meta.outputs.tags }}' | tr ' ' '\n' | while read tag; do
+            echo "- \`$tag\`" >> docker-summary.md
+          done
+          echo "" >> docker-summary.md
+          echo "## Usage" >> docker-summary.md
+          echo '```bash' >> docker-summary.md
+          echo "# Pull and run AMD64 image" >> docker-summary.md
+          echo "docker pull --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-multiplatform" >> docker-summary.md
+          echo "docker run -it --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-multiplatform" >> docker-summary.md
+          echo "" >> docker-summary.md
+          echo "# Pull and run ARM64 image" >> docker-summary.md
+          echo "docker pull --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-multiplatform" >> docker-summary.md
+          echo "docker run -it --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-multiplatform" >> docker-summary.md
+          echo '```' >> docker-summary.md
+
+      - name: Upload build summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-multiplatform-summary
+          path: docker-summary.md
+          retention-days: 30

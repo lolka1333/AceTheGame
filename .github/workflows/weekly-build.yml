@@ -1,0 +1,230 @@
+name: Weekly Development Build
+
+on:
+  schedule:
+    # Run every Sunday at 02:00 UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+jobs:
+  weekly-build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      packages: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "true"
+          fetch-depth: 0
+
+      - name: Set up build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake unzip wget python3 openjdk-17-jdk-headless apktool fd-find zip
+
+      - name: Setup Java
+        run: |
+          JAVA_HOME=$(fdfind java-17 /usr/lib/jvm | xargs readlink -f)
+          echo "JAVA_HOME=${JAVA_HOME}" >> $GITHUB_ENV
+          echo "JAVA_HOME set to ${JAVA_HOME}"
+
+      - name: Install Android SDK and NDK
+        run: |
+          sudo apt-get install -y android-sdk sdkmanager
+          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+          wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
+          unzip ndk.zip -d ndk
+          rm ndk.zip
+          echo "ANDROID_NDK_HOME=$PWD/ndk/android-ndk-r25c" >> $GITHUB_ENV
+          yes | sdkmanager --licenses || true
+
+      - name: Get current date
+        id: date
+        run: |
+          echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          echo "datetime=$(date +'%Y-%m-%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Build all components
+        run: |
+          # Build ACE for multiple platforms
+          cd ACE
+          
+          # Linux build
+          mkdir -p build-linux
+          cd build-linux
+          cmake -DCMAKE_BUILD_TYPE=Release ../
+          make -j$(nproc)
+          cd ..
+          
+          # Android builds for multiple architectures
+          for arch in arm64-v8a armeabi-v7a x86_64; do
+            mkdir -p build-android-$arch
+            cd build-android-$arch
+            cmake -DCMAKE_BUILD_TYPE=Release \
+                  -DCMAKE_TOOLCHAIN_FILE=../../ndk/android-ndk-r25c/build/cmake/android.toolchain.cmake \
+                  -DANDROID_ABI=$arch \
+                  -DANDROID_PLATFORM=android-21 \
+                  ../
+            make -j$(nproc)
+            cd ..
+          done
+          
+          cd ..
+          
+          # Build Modder
+          cd Modder/injector
+          python3 ./gen_smali.py
+          cd ..
+          ./gradlew build -x test
+          cd ..
+          
+          # Build ATG
+          cd ATG
+          ./gradlew assembleDebug
+          ./gradlew assembleRelease
+          cd ..
+          
+          # Build Billing Hack
+          cd billing-hack
+          ./gradlew assembleDebug
+          ./gradlew assembleRelease
+          cd ..
+
+      - name: Create development snapshot
+        run: |
+          mkdir -p weekly-snapshot
+          
+          # Create directory structure
+          mkdir -p weekly-snapshot/{linux,android,modder,apks,docs}
+          
+          # Copy Linux binaries
+          find ACE/build-linux -name "ace*" -type f -executable | xargs -I {} cp {} weekly-snapshot/linux/
+          find ACE/build-linux -name "*.so" | xargs -I {} cp {} weekly-snapshot/linux/
+          
+          # Copy Android binaries
+          for arch in arm64-v8a armeabi-v7a x86_64; do
+            mkdir -p weekly-snapshot/android/$arch
+            find ACE/build-android-$arch -name "ace*" -type f | xargs -I {} cp {} weekly-snapshot/android/$arch/
+            find ACE/build-android-$arch -name "*.so" | xargs -I {} cp {} weekly-snapshot/android/$arch/
+          done
+          
+          # Copy Modder JAR
+          find Modder/modder/build/libs -name "*.jar" | xargs -I {} cp {} weekly-snapshot/modder/
+          
+          # Copy APK files
+          find ATG/app/build/outputs/apk -name "*.apk" | xargs -I {} cp {} weekly-snapshot/apks/
+          find billing-hack/app/build/outputs/apk -name "*.apk" | xargs -I {} cp {} weekly-snapshot/apks/
+          
+          # Copy documentation
+          cp README.md installation_guide.md changelog.md weekly-snapshot/docs/
+          cp -r docs/* weekly-snapshot/docs/ 2>/dev/null || true
+          
+          # Create build info
+          echo "AceTheGame Weekly Development Build" > weekly-snapshot/BUILD_INFO.txt
+          echo "Build Date: $(date)" >> weekly-snapshot/BUILD_INFO.txt
+          echo "Git Commit: $(git rev-parse HEAD)" >> weekly-snapshot/BUILD_INFO.txt
+          echo "Git Branch: $(git rev-parse --abbrev-ref HEAD)" >> weekly-snapshot/BUILD_INFO.txt
+          echo "Build Environment: Ubuntu 22.04" >> weekly-snapshot/BUILD_INFO.txt
+          echo "" >> weekly-snapshot/BUILD_INFO.txt
+          echo "Components Built:" >> weekly-snapshot/BUILD_INFO.txt
+          echo "- ACE (Linux + Android multi-arch)" >> weekly-snapshot/BUILD_INFO.txt
+          echo "- Modder (JAR)" >> weekly-snapshot/BUILD_INFO.txt
+          echo "- ATG (APK)" >> weekly-snapshot/BUILD_INFO.txt
+          echo "- Billing Hack (APK)" >> weekly-snapshot/BUILD_INFO.txt
+          
+          # Create checksums
+          cd weekly-snapshot
+          find . -type f -exec sha256sum {} \; > ../checksums.txt
+          cd ..
+          mv checksums.txt weekly-snapshot/
+          
+          # Create archives
+          tar -czf AceTheGame-weekly-${{ steps.date.outputs.date }}.tar.gz weekly-snapshot/
+          zip -r AceTheGame-weekly-${{ steps.date.outputs.date }}.zip weekly-snapshot/
+
+      - name: Upload weekly snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-snapshot-${{ steps.date.outputs.date }}
+          path: |
+            AceTheGame-weekly-*.tar.gz
+            AceTheGame-weekly-*.zip
+            weekly-snapshot/
+          retention-days: 30
+
+      - name: Create weekly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: weekly-${{ steps.date.outputs.date }}
+          name: Weekly Development Build ${{ steps.date.outputs.date }}
+          body: |
+            # AceTheGame Weekly Development Build
+            
+            This is an automated weekly build containing the latest development changes.
+            
+            ## 📅 Build Information
+            - **Date**: ${{ steps.date.outputs.date }}
+            - **Commit**: ${{ github.sha }}
+            - **Branch**: ${{ github.ref_name }}
+            
+            ## 📦 What's included
+            - **ACE**: Memory scanner and editor (Linux + Android multi-arch)
+            - **Modder**: APK modification tool (JAR)
+            - **ATG**: Android application (APK)
+            - **Billing Hack**: In-app purchase bypass (APK)
+            - **Documentation**: Installation guide, changelog, and docs
+            
+            ## ⚠️ Important Notes
+            - This is a development build and may contain unstable features
+            - Use at your own risk
+            - For stable releases, use the official releases
+            
+            ## 🔍 Verification
+            - SHA256 checksums are included in the archive
+            - All binaries are built from source using GitHub Actions
+          draft: false
+          prerelease: true
+          files: |
+            AceTheGame-weekly-*.tar.gz
+            AceTheGame-weekly-*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up old weekly releases
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: releases } = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            
+            const weeklyReleases = releases.filter(release => 
+              release.tag_name.startsWith('weekly-') && release.prerelease
+            );
+            
+            // Keep only the latest 4 weekly releases
+            const releasesToDelete = weeklyReleases.slice(4);
+            
+            for (const release of releasesToDelete) {
+              console.log(`Deleting old weekly release: ${release.tag_name}`);
+              await github.rest.repos.deleteRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id,
+              });
+              
+              // Also delete the tag
+              try {
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `tags/${release.tag_name}`,
+                });
+              } catch (error) {
+                console.log(`Could not delete tag ${release.tag_name}: ${error.message}`);
+              }
+            }

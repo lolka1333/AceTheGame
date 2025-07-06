@@ -1,0 +1,186 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      packages: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "true"
+          fetch-depth: 0
+
+      - name: Set up environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake unzip wget python3 openjdk-17-jdk-headless apktool fd-find zip
+
+      - name: Setup Java
+        run: |
+          JAVA_HOME=$(fdfind java-17 /usr/lib/jvm | xargs readlink -f)
+          echo "JAVA_HOME=${JAVA_HOME}" >> $GITHUB_ENV
+          echo "JAVA_HOME set to ${JAVA_HOME}"
+
+      - name: Install Android SDK and NDK
+        run: |
+          sudo apt-get install -y android-sdk sdkmanager
+          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+          wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
+          unzip ndk.zip -d ndk
+          rm ndk.zip
+          echo "ANDROID_NDK_HOME=$PWD/ndk/android-ndk-r25c" >> $GITHUB_ENV
+          yes | sdkmanager --licenses || true
+
+      - name: Build ACE (Linux)
+        run: |
+          cd ACE
+          mkdir -p build-linux
+          cd build-linux
+          cmake -DCMAKE_BUILD_TYPE=Release ../
+          make -j$(nproc)
+          make install DESTDIR=../release-linux
+
+      - name: Build ACE (Android)
+        run: |
+          cd ACE
+          mkdir -p build-android
+          cd build-android
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE=../../ndk/android-ndk-r25c/build/cmake/android.toolchain.cmake \
+                -DANDROID_ABI=arm64-v8a \
+                -DANDROID_PLATFORM=android-21 \
+                ../
+          make -j$(nproc)
+          make install DESTDIR=../release-android
+
+      - name: Build Modder
+        run: |
+          cd Modder/injector
+          python3 ./gen_smali.py
+          cd ..
+          ./gradlew build -x test
+
+      - name: Build ATG
+        run: |
+          cd ATG
+          ./gradlew assembleRelease
+
+      - name: Build Billing Hack
+        run: |
+          cd billing-hack
+          ./gradlew assembleRelease
+
+      - name: Create comprehensive release package
+        run: |
+          mkdir -p release-package
+          
+          # Copy ACE binaries
+          find ACE/release-linux -name "*.so" -o -name "ace*" -type f | xargs -I {} cp {} release-package/
+          find ACE/release-android -name "*.so" -o -name "ace*" -type f | xargs -I {} cp {} release-package/
+          
+          # Copy Modder JAR
+          find Modder/modder/build/libs -name "*.jar" | xargs -I {} cp {} release-package/
+          
+          # Copy APK files
+          find ATG/app/build/outputs/apk -name "*.apk" | xargs -I {} cp {} release-package/
+          find billing-hack/app/build/outputs/apk -name "*.apk" | xargs -I {} cp {} release-package/
+          
+          # Create documentation
+          cp README.md release-package/
+          cp installation_guide.md release-package/
+          cp changelog.md release-package/
+          cp -r docs release-package/ || true
+          
+          # Create version info
+          echo "AceTheGame Release $(date '+%Y-%m-%d %H:%M:%S')" > release-package/VERSION.txt
+          echo "Git commit: $(git rev-parse HEAD)" >> release-package/VERSION.txt
+          echo "Build environment: Ubuntu 22.04" >> release-package/VERSION.txt
+          
+          # Create different archive formats
+          tar -czf AceTheGame-${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}-linux.tar.gz -C release-package .
+          zip -r AceTheGame-${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}-linux.zip release-package/
+          
+          # Create individual component archives
+          cd release-package
+          
+          # ACE archive
+          mkdir -p ace-package
+          find . -name "ace*" -o -name "*.so" | xargs -I {} cp {} ace-package/
+          cp README.md ace-package/
+          tar -czf ../ACE-${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}.tar.gz ace-package/
+          
+          # Modder archive
+          mkdir -p modder-package
+          find . -name "*.jar" | xargs -I {} cp {} modder-package/
+          tar -czf ../Modder-${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}.tar.gz modder-package/
+          
+          # Android apps archive
+          mkdir -p android-package
+          find . -name "*.apk" | xargs -I {} cp {} android-package/
+          tar -czf ../AndroidApps-${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}.tar.gz android-package/
+          
+          cd ..
+
+      - name: Generate release notes
+        run: |
+          echo "# AceTheGame Release ${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}" > release-notes.md
+          echo "" >> release-notes.md
+          echo "## 📦 What's included:" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "- **ACE**: Memory scanner and editor for Android and Linux" >> release-notes.md
+          echo "- **Modder**: APK modification tool" >> release-notes.md
+          echo "- **ATG**: Android application" >> release-notes.md
+          echo "- **Billing Hack**: In-app purchase bypass tool" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "## 🔧 Build Information:" >> release-notes.md
+          echo "- Build date: $(date '+%Y-%m-%d %H:%M:%S')" >> release-notes.md
+          echo "- Commit: $(git rev-parse --short HEAD)" >> release-notes.md
+          echo "- Environment: Ubuntu 22.04" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "## 📋 Files:" >> release-notes.md
+          echo "" >> release-notes.md
+          ls -la *.tar.gz *.zip | while read -r line; do
+            echo "- $line" >> release-notes.md
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || github.event.inputs.version }}
+          name: AceTheGame ${{ github.ref_name || github.event.inputs.version }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: false
+          files: |
+            AceTheGame-*.tar.gz
+            AceTheGame-*.zip
+            ACE-*.tar.gz
+            Modder-*.tar.gz
+            AndroidApps-*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            *.tar.gz
+            *.zip
+            release-package/
+          retention-days: 90
