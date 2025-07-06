@@ -43,8 +43,7 @@ private var attachedStatusString: MutableState<String> = mutableStateOf("None")
 enum class ProcessDisplayMode {
     ORIGINAL,     // Using ACE util_client (may truncate names)
     FULL_NAME,    // Full process names using ps -eo pid,comm  
-    FULL_COMMAND, // Full command lines using ps -eo pid,args
-    PROC_FS       // Using /proc filesystem for maximum detail
+    FULL_COMMAND  // Full command lines using ps -eo pid,args
 }
 
 /**
@@ -140,7 +139,6 @@ private fun _ProcessMenuContent(
                 ProcessDisplayMode.ORIGINAL -> "Original"
                 ProcessDisplayMode.FULL_NAME -> "Full Name"
                 ProcessDisplayMode.FULL_COMMAND -> "Full Command"
-                ProcessDisplayMode.PROC_FS -> "Detailed"
             }
         }")
     }
@@ -156,8 +154,7 @@ private fun _ProcessMenuContent(
                 processDisplayMode.value = when (processDisplayMode.value) {
                     ProcessDisplayMode.ORIGINAL -> ProcessDisplayMode.FULL_NAME
                     ProcessDisplayMode.FULL_NAME -> ProcessDisplayMode.FULL_COMMAND
-                    ProcessDisplayMode.FULL_COMMAND -> ProcessDisplayMode.PROC_FS
-                    ProcessDisplayMode.PROC_FS -> ProcessDisplayMode.ORIGINAL
+                    ProcessDisplayMode.FULL_COMMAND -> ProcessDisplayMode.ORIGINAL
                 }
                 onRefreshClicked() // Refresh the list with new mode
             },
@@ -168,7 +165,6 @@ private fun _ProcessMenuContent(
                     ProcessDisplayMode.ORIGINAL -> "Mode: Original"
                     ProcessDisplayMode.FULL_NAME -> "Mode: Full Name"
                     ProcessDisplayMode.FULL_COMMAND -> "Mode: Full Command"
-                    ProcessDisplayMode.PROC_FS -> "Mode: Detailed"
                 }
             )
         }
@@ -254,7 +250,6 @@ fun refreshProcList(ace: ACE?, processList: SnapshotStateList<ProcInfo>) {
         ProcessDisplayMode.ORIGINAL -> ace!!.ListRunningProc()
         ProcessDisplayMode.FULL_NAME -> ace!!.ListRunningProcFull()
         ProcessDisplayMode.FULL_COMMAND -> ace!!.ListRunningProcWithArgs()
-        ProcessDisplayMode.PROC_FS -> ace!!.ListRunningProcFromProcFS()
     }
     if (runningProcs != null) {
         for (proc in runningProcs) processList.add(proc)

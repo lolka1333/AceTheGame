@@ -34,31 +34,21 @@ fun ListRunningProcWithArgs(): List<ProcInfo> {
     // Uses: ps -eo pid,args -w -k -pid
     // Returns full command lines with arguments
 }
-
-/**
- * Get running processes using /proc filesystem for maximum detail
- */
-fun ListRunningProcFromProcFS(): List<ProcInfo> {
-    // Reads directly from /proc/PID/cmdline and /proc/PID/comm
-    // Provides the most detailed information available
-}
 ```
 
 ### 2. Обновление режимов отображения процессов
 **Файл:** `ATG/app/src/main/java/com/kuhakupixel/atg/ui/menu/Process.kt`
 
-**Добавлены четыре режима:**
+**Добавлены три режима:**
 - `ORIGINAL` - использует ACE util_client (может обрезать имена)
 - `FULL_NAME` - полные имена процессов через Toybox ps
 - `FULL_COMMAND` - полные командные строки через Toybox ps
-- `PROC_FS` - максимальная детализация через /proc файловую систему
 
 ```kotlin
 enum class ProcessDisplayMode {
     ORIGINAL,     // Using ACE util_client (may truncate names)
     FULL_NAME,    // Full process names using ps -eo pid,comm  
-    FULL_COMMAND, // Full command lines using ps -eo pid,args
-    PROC_FS       // Using /proc filesystem for maximum detail
+    FULL_COMMAND  // Full command lines using ps -eo pid,args
 }
 ```
 
@@ -90,7 +80,6 @@ fun refreshProcList(ace: ACE?, processList: SnapshotStateList<ProcInfo>) {
         ProcessDisplayMode.ORIGINAL -> ace!!.ListRunningProc()
         ProcessDisplayMode.FULL_NAME -> ace!!.ListRunningProcFull()
         ProcessDisplayMode.FULL_COMMAND -> ace!!.ListRunningProcWithArgs()
-        ProcessDisplayMode.PROC_FS -> ace!!.ListRunningProcFromProcFS()
     }
     if (runningProcs != null) {
         for (proc in runningProcs) processList.add(proc)
@@ -100,8 +89,8 @@ fun refreshProcList(ace: ACE?, processList: SnapshotStateList<ProcInfo>) {
 
 ### 5. Добавление кнопки переключения режимов
 **Интерфейс дополнен:**
-- Кнопка для переключения между четырьмя режимами отображения
-- Отображение текущего режима ("Original", "Full Name", "Full Command", "Detailed")
+- Кнопка для переключения между тремя режимами отображения
+- Отображение текущего режима ("Original", "Full Name", "Full Command")
 - Автоматическое обновление списка при смене режима
 
 ### 6. Увеличение размера колонки имени процесса
@@ -148,11 +137,10 @@ if (colIndex == 1) {
 ## Результат
 После внесения изменений:
 1. **Полные имена процессов**: используются Android-совместимые команды для получения полных имен
-2. **Четыре режима отображения**: 
+2. **Три режима отображения**: 
    - Оригинальный (для совместимости)
    - Полные имена процессов
    - Полные командные строки с аргументами
-   - Детальная информация из /proc файловой системы
 3. **Больше места для имен**: колонка Name занимает 80% ширины экрана
 4. **Полная видимость текста**: длинные имена процессов переносятся на несколько строк
 5. **Лучшая читаемость**: удалена горизонтальная прокрутка
@@ -163,7 +151,6 @@ if (colIndex == 1) {
 ### Используемые команды для Android (Toybox ps):
 - `ps -eo pid,comm -w -k -pid` - для полных имен процессов
 - `ps -eo pid,args -w -k -pid` - для полных командных строк
-- `ps -eo pid -w` + чтение `/proc/PID/cmdline` и `/proc/PID/comm` - для максимальной детализации
 
 ### Отличия от GNU ps:
 - Нет поддержки `--no-headers` (заголовок убирается программно)
@@ -176,7 +163,7 @@ if (colIndex == 1) {
 ## Заключение
 Проблема с обрезанными именами процессов полностью решена с учетом особенностей Android платформы. Теперь пользователи могут:
 - Видеть полные имена процессов
-- Выбирать режим отображения (имена, командные строки, детальная информация)
+- Выбирать режим отображения (имена или командные строки)
 - Переключаться между режимами одной кнопкой
 - Наслаждаться улучшенной читаемостью интерфейса
 
