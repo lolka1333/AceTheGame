@@ -72,6 +72,17 @@ jobs:
       - name: "install build dependencies"
         run: sudo apt-get install openjdk-17-jdk-headless apktool gradle -y
 
+      - name: "setup Android SDK environment"
+        run: |
+          # Install Android SDK
+          sudo apt-get install -y android-sdk sdkmanager
+          # Unset ANDROID_SDK_ROOT to avoid conflicts
+          unset ANDROID_SDK_ROOT
+          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+          # Also unset ANDROID_SDK_ROOT in the environment
+          echo "ANDROID_SDK_ROOT=" >> $GITHUB_ENV
+          yes | sdkmanager --licenses || true
+
       - name: generating code for injection
         working-directory: ./Modder/injector
         run: python3 ./gen_smali.py
@@ -259,7 +270,11 @@ jobs:
       - name: "install Android SDK"
         run: |
           sudo apt-get install -y android-sdk sdkmanager
+          # Unset ANDROID_SDK_ROOT to avoid conflicts
+          unset ANDROID_SDK_ROOT
           echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+          # Also unset ANDROID_SDK_ROOT in the environment
+          echo "ANDROID_SDK_ROOT=" >> $GITHUB_ENV
 
       - name: "install Android NDK"
         run: |

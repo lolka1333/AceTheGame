@@ -39,7 +39,11 @@ jobs:
       - name: Install Android SDK and NDK
         run: |
           sudo apt-get install -y android-sdk sdkmanager
+          # Unset ANDROID_SDK_ROOT to avoid conflicts
+          unset ANDROID_SDK_ROOT
           echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+          # Also unset ANDROID_SDK_ROOT in the environment
+          echo "ANDROID_SDK_ROOT=" >> $GITHUB_ENV
           wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
           unzip ndk.zip -d ndk
           rm ndk.zip
