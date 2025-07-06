@@ -194,8 +194,8 @@ jobs:
           # Find the APK file
           APK_PATH=$(find ./app/build/outputs/apk/debug -name "*.apk" | head -1)
           if [ -n "$APK_PATH" ]; then
-            # Sign the APK using jarsigner with SHA256
-            jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA256 \
+            # Sign the APK using jarsigner
+            jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 \
               -keystore ./app/keystore.jks \
               -storepass "${{ secrets.APP_KEYSTORE_PASSWORD }}" \
               -keypass "${{ secrets.APP_KEY_PASSWORD }}" \
@@ -208,9 +208,6 @@ jobs:
           else
             echo "No APK file found to sign"
           fi
-          
-          # Clean up keystore for security
-          rm -f ./app/keystore.jks
 
       - name: Check ATG artifacts
         run: |
@@ -270,8 +267,8 @@ jobs:
           # Find the APK file
           APK_PATH=$(find ./app/build/outputs/apk/debug -name "*.apk" | head -1)
           if [ -n "$APK_PATH" ]; then
-            # Sign the APK using jarsigner with SHA256
-            jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA256 \
+            # Sign the APK using jarsigner
+            jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 \
               -keystore ./app/keystore.jks \
               -storepass "${{ secrets.APP_KEYSTORE_PASSWORD }}" \
               -keypass "${{ secrets.APP_KEY_PASSWORD }}" \
@@ -284,9 +281,6 @@ jobs:
           else
             echo "No APK file found to sign"
           fi
-          
-          # Clean up keystore for security
-          rm -f ./app/keystore.jks
 
       - name: Check billing-hack artifacts
         run: |
@@ -359,8 +353,8 @@ jobs:
             if [ -f "$APK_PATH" ]; then
               echo "Signing APK: $APK_PATH"
               
-              # Sign the APK using jarsigner with SHA256
-              jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA256 \
+              # Sign the APK using jarsigner
+              jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 \
                 -keystore ./release/keystore.jks \
                 -storepass "${{ secrets.APP_KEYSTORE_PASSWORD }}" \
                 -keypass "${{ secrets.APP_KEY_PASSWORD }}" \
