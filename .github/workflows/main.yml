@@ -186,64 +186,25 @@ jobs:
         if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
         working-directory: ./ATG
         run: |
+          # Install build tools if not present
+          if ! command -v zipalign &> /dev/null; then
+            sudo apt-get install -y android-sdk-build-tools
+          fi
+          
           # Find the APK file
           APK_PATH=$(find ./app/build/outputs/apk/debug -name "*.apk" | head -1)
           if [ -n "$APK_PATH" ]; then
-            echo "Found APK: $APK_PATH"
-            
-            # Create a copy of the unsigned APK
-            cp "$APK_PATH" "${APK_PATH}.unsigned"
-            
-            # Remove existing signatures from APK if present
-            echo "Removing existing signatures if any..."
-            zip -d "$APK_PATH" "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.DSA" "META-INF/MANIFEST.MF" 2>/dev/null || true
-            
             # Sign the APK using jarsigner with SHA256
-            echo "Signing APK..."
             jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA256 \
               -keystore ./app/keystore.jks \
               -storepass "${{ secrets.APP_KEYSTORE_PASSWORD }}" \
               -keypass "${{ secrets.APP_KEY_PASSWORD }}" \
-              -tsa http://timestamp.digicert.com \
               "$APK_PATH" "${{ secrets.APP_KEYSTORE_ALIAS }}"
             
             # Verify the signature
-            echo "Verifying signature..."
             jarsigner -verify -verbose -certs "$APK_PATH"
             
-            # Install Android SDK build-tools if needed
-            if ! command -v zipalign &> /dev/null; then
-              ANDROID_SDK_ROOT="/usr/local/lib/android/sdk"
-              BUILD_TOOLS_VERSION="34.0.0"
-              ZIPALIGN="${ANDROID_SDK_ROOT}/build-tools/${BUILD_TOOLS_VERSION}/zipalign"
-              
-              if [ ! -f "$ZIPALIGN" ]; then
-                echo "Installing Android SDK build-tools..."
-                sdkmanager --install "build-tools;${BUILD_TOOLS_VERSION}" || {
-                  # Fallback to apt package
-                  sudo apt-get install -y zipalign
-                  ZIPALIGN="zipalign"
-                }
-              fi
-            else
-              ZIPALIGN="zipalign"
-            fi
-            
-            # Zipalign the APK
-            if command -v $ZIPALIGN &> /dev/null || [ -f "$ZIPALIGN" ]; then
-              echo "Zipaligning APK..."
-              mv "$APK_PATH" "${APK_PATH}.unaligned"
-              $ZIPALIGN -v 4 "${APK_PATH}.unaligned" "$APK_PATH"
-              rm -f "${APK_PATH}.unaligned"
-              echo "APK zipaligned successfully"
-            else
-              echo "Warning: zipalign not found, skipping zipalign step"
-            fi
-            
-            # Clean up backup
-            rm -f "${APK_PATH}.unsigned"
-            
-            echo "APK signed and processed successfully: $APK_PATH"
+            echo "APK signed successfully: $APK_PATH"
           else
             echo "No APK file found to sign"
           fi
@@ -301,64 +262,25 @@ jobs:
         if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
         working-directory: ./billing-hack
         run: |
+          # Install build tools if not present
+          if ! command -v zipalign &> /dev/null; then
+            sudo apt-get install -y android-sdk-build-tools
+          fi
+          
           # Find the APK file
           APK_PATH=$(find ./app/build/outputs/apk/debug -name "*.apk" | head -1)
           if [ -n "$APK_PATH" ]; then
-            echo "Found APK: $APK_PATH"
-            
-            # Create a copy of the unsigned APK
-            cp "$APK_PATH" "${APK_PATH}.unsigned"
-            
-            # Remove existing signatures from APK if present
-            echo "Removing existing signatures if any..."
-            zip -d "$APK_PATH" "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.DSA" "META-INF/MANIFEST.MF" 2>/dev/null || true
-            
             # Sign the APK using jarsigner with SHA256
-            echo "Signing APK..."
             jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA256 \
               -keystore ./app/keystore.jks \
               -storepass "${{ secrets.APP_KEYSTORE_PASSWORD }}" \
               -keypass "${{ secrets.APP_KEY_PASSWORD }}" \
-              -tsa http://timestamp.digicert.com \
               "$APK_PATH" "${{ secrets.APP_KEYSTORE_ALIAS }}"
             
             # Verify the signature
-            echo "Verifying signature..."
             jarsigner -verify -verbose -certs "$APK_PATH"
             
-            # Install Android SDK build-tools if needed
-            if ! command -v zipalign &> /dev/null; then
-              ANDROID_SDK_ROOT="/usr/local/lib/android/sdk"
-              BUILD_TOOLS_VERSION="34.0.0"
-              ZIPALIGN="${ANDROID_SDK_ROOT}/build-tools/${BUILD_TOOLS_VERSION}/zipalign"
-              
-              if [ ! -f "$ZIPALIGN" ]; then
-                echo "Installing Android SDK build-tools..."
-                sdkmanager --install "build-tools;${BUILD_TOOLS_VERSION}" || {
-                  # Fallback to apt package
-                  sudo apt-get install -y zipalign
-                  ZIPALIGN="zipalign"
-                }
-              fi
-            else
-              ZIPALIGN="zipalign"
-            fi
-            
-            # Zipalign the APK
-            if command -v $ZIPALIGN &> /dev/null || [ -f "$ZIPALIGN" ]; then
-              echo "Zipaligning APK..."
-              mv "$APK_PATH" "${APK_PATH}.unaligned"
-              $ZIPALIGN -v 4 "${APK_PATH}.unaligned" "$APK_PATH"
-              rm -f "${APK_PATH}.unaligned"
-              echo "APK zipaligned successfully"
-            else
-              echo "Warning: zipalign not found, skipping zipalign step"
-            fi
-            
-            # Clean up backup
-            rm -f "${APK_PATH}.unsigned"
-            
-            echo "APK signed and processed successfully: $APK_PATH"
+            echo "APK signed successfully: $APK_PATH"
           else
             echo "No APK file found to sign"
           fi
@@ -432,64 +354,22 @@ jobs:
           
       - name: Sign Release APK files
         run: |
-          # Install Android SDK build-tools if needed
-          if ! command -v zipalign &> /dev/null; then
-            ANDROID_SDK_ROOT="/usr/local/lib/android/sdk"
-            BUILD_TOOLS_VERSION="34.0.0"
-            ZIPALIGN="${ANDROID_SDK_ROOT}/build-tools/${BUILD_TOOLS_VERSION}/zipalign"
-            
-            if [ ! -f "$ZIPALIGN" ]; then
-              echo "Installing Android SDK build-tools..."
-              sdkmanager --install "build-tools;${BUILD_TOOLS_VERSION}" || {
-                # Fallback to apt package
-                sudo apt-get install -y zipalign
-                ZIPALIGN="zipalign"
-              }
-            fi
-          else
-            ZIPALIGN="zipalign"
-          fi
-          
           # Find and sign all APK files in the release directory
           find ./release -name "*.apk" | while read APK_PATH; do
             if [ -f "$APK_PATH" ]; then
-              echo "Processing APK: $APK_PATH"
-              
-              # Create a copy of the unsigned APK
-              cp "$APK_PATH" "${APK_PATH}.unsigned"
-              
-              # Remove existing signatures from APK if present
-              echo "Removing existing signatures if any..."
-              zip -d "$APK_PATH" "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.DSA" "META-INF/MANIFEST.MF" 2>/dev/null || true
+              echo "Signing APK: $APK_PATH"
               
               # Sign the APK using jarsigner with SHA256
-              echo "Signing APK..."
               jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA256 \
                 -keystore ./release/keystore.jks \
                 -storepass "${{ secrets.APP_KEYSTORE_PASSWORD }}" \
                 -keypass "${{ secrets.APP_KEY_PASSWORD }}" \
-                -tsa http://timestamp.digicert.com \
                 "$APK_PATH" "${{ secrets.APP_KEYSTORE_ALIAS }}"
               
               # Verify the signature
-              echo "Verifying signature..."
               jarsigner -verify -verbose -certs "$APK_PATH"
               
-              # Zipalign the APK
-              if command -v $ZIPALIGN &> /dev/null || [ -f "$ZIPALIGN" ]; then
-                echo "Zipaligning APK..."
-                mv "$APK_PATH" "${APK_PATH}.unaligned"
-                $ZIPALIGN -v 4 "${APK_PATH}.unaligned" "$APK_PATH"
-                rm -f "${APK_PATH}.unaligned"
-                echo "APK zipaligned successfully"
-              else
-                echo "Warning: zipalign not found, skipping zipalign step"
-              fi
-              
-              # Clean up backup
-              rm -f "${APK_PATH}.unsigned"
-              
-              echo "APK signed and processed successfully: $APK_PATH"
+              echo "APK signed successfully: $APK_PATH"
             fi
           done
           
