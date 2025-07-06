@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kuhakupixel.atg.R
@@ -81,7 +82,7 @@ fun ProcessTable(
 
     CreateTable(modifier = Modifier.padding(16.dp),
         colNames = listOf("Pid", "Name"),
-        colWeights = listOf(0.3f, 0.7f),
+        colWeights = listOf(0.2f, 0.8f),
         itemCount = processList.size,
         minEmptyItemCount = 50,
         onRowClicked = { rowIndex: Int ->
@@ -96,7 +97,11 @@ fun ProcessTable(
                 Text(text = processList[rowIndex].GetPidStr())
             }
             if (colIndex == 1) {
-                Text(text = processList[rowIndex].GetName())
+                Text(
+                    text = processList[rowIndex].GetName(),
+                    maxLines = Int.MAX_VALUE,
+                    overflow = TextOverflow.Visible
+                )
             }
         })
 }

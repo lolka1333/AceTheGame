@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontVariation.width
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import my.nanihadesuka.compose.LazyColumnScrollbar
@@ -47,8 +48,8 @@ fun CreateTable(
             .border(1.dp, MaterialTheme.colorScheme.primary)
             .weight(weight = weight)
             .padding(8.dp)
-            // just in case if text is too long
-            .horizontalScroll(rememberScrollState())
+            // Remove horizontal scroll to allow text wrapping
+            // .horizontalScroll(rememberScrollState())
             // so children's size in [drawCell] can be as big as possible
             // https://stackoverflow.com/questions/67677125/fill-height-for-child-in-row
             // https://stackoverflow.com/questions/65942711/match-width-of-parent-in-column-jetpack-compose
@@ -62,7 +63,10 @@ fun CreateTable(
     ) {
         Text(
             text = text,
-            modifier = GetCellModifier(weight).defaultMinSize(minHeight = rowMinHeight)
+            modifier = GetCellModifier(weight).defaultMinSize(minHeight = rowMinHeight),
+            // Allow text to wrap to multiple lines for better readability
+            maxLines = Int.MAX_VALUE,
+            overflow = TextOverflow.Visible
         )
     }
     if (colNames.size != colWeights.size) {
