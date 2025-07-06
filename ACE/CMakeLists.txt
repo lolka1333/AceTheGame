@@ -1,7 +1,7 @@
 # Set the minimum version of CMake that can be used To find the cmake version
 # run $ cmake --version
 #  	error when compiling tests
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.15)
 # =======================================
 # require compiler that supports c++20
 # https://stackoverflow.com/questions/42834844/how-to-get-cmake-to-pass-either-std-c14-c1y-or-c17-c1z-based-on-gcc-vers

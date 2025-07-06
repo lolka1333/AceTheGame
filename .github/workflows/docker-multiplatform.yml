@@ -25,6 +25,10 @@ jobs:
         with:
           submodules: "true"
 
+      - name: Set lowercase repository name
+        run: |
+          echo "IMAGE_NAME_LOWER=$(echo ${{ env.IMAGE_NAME }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Free up maximum disk space
         run: |
           echo "Before cleanup:"
@@ -76,7 +80,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}
           tags: |
             type=ref,event=branch,suffix=-multiplatform
             type=ref,event=pr,suffix=-multiplatform
@@ -101,10 +105,10 @@ jobs:
       - name: Test multi-platform images
         run: |
           echo "Testing AMD64 image:"
-          docker run --rm --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}-multiplatform python3 --version
+          docker run --rm --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:${{ steps.meta.outputs.version }}-multiplatform python3 --version
           
           echo "Testing ARM64 image:"
-          docker run --rm --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}-multiplatform python3 --version
+          docker run --rm --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:${{ steps.meta.outputs.version }}-multiplatform python3 --version
 
       - name: Create manifest summary
         run: |
@@ -115,7 +119,7 @@ jobs:
           echo "## Built Images" >> docker-summary.md
           echo "- Platform: linux/amd64, linux/arm64" >> docker-summary.md
           echo "- Registry: ${{ env.REGISTRY }}" >> docker-summary.md
-          echo "- Image: ${{ env.IMAGE_NAME }}" >> docker-summary.md
+          echo "- Image: ${{ env.IMAGE_NAME_LOWER }}" >> docker-summary.md
           echo "" >> docker-summary.md
           echo "## Tags" >> docker-summary.md
           echo '${{ steps.meta.outputs.tags }}' | tr ' ' '\n' | while read tag; do
@@ -125,12 +129,12 @@ jobs:
           echo "## Usage" >> docker-summary.md
           echo '```bash' >> docker-summary.md
           echo "# Pull and run AMD64 image" >> docker-summary.md
-          echo "docker pull --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-multiplatform" >> docker-summary.md
-          echo "docker run -it --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-multiplatform" >> docker-summary.md
+          echo "docker pull --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:latest-multiplatform" >> docker-summary.md
+          echo "docker run -it --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:latest-multiplatform" >> docker-summary.md
           echo "" >> docker-summary.md
           echo "# Pull and run ARM64 image" >> docker-summary.md
-          echo "docker pull --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-multiplatform" >> docker-summary.md
-          echo "docker run -it --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-multiplatform" >> docker-summary.md
+          echo "docker pull --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:latest-multiplatform" >> docker-summary.md
+          echo "docker run -it --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:latest-multiplatform" >> docker-summary.md
           echo '```' >> docker-summary.md
 
       - name: Upload build summary
