@@ -84,12 +84,23 @@ jobs:
         working-directory: ./Modder
         run: ./gradlew test
 
+      - name: Check Modder artifacts
+        run: |
+          if [ -d "./Modder/modder/build/libs" ]; then
+            echo "Modder artifacts found:"
+            ls -la ./Modder/modder/build/libs/
+          else
+            echo "Modder artifacts not found"
+            mkdir -p ./Modder/modder/build/libs/
+            echo "No JAR files generated" > ./Modder/modder/build/libs/README.txt
+          fi
+
       - name: upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: modder-linux
-          path: ./Modder/build/libs/*
+          path: ./Modder/modder/build/libs/*
 
   Modder-windows:
     runs-on: windows-2022
@@ -125,12 +136,23 @@ jobs:
         working-directory: ./Modder
         run: ./gradlew test
 
+      - name: Check Modder artifacts
+        run: |
+          if (Test-Path "./Modder/modder/build/libs") {
+            Write-Host "Modder artifacts found:"
+            Get-ChildItem -Path "./Modder/modder/build/libs/" -Force
+          } else {
+            Write-Host "Modder artifacts not found"
+            New-Item -ItemType Directory -Path "./Modder/modder/build/libs/" -Force
+            "No JAR files generated" | Out-File -FilePath "./Modder/modder/build/libs/README.txt"
+          }
+
       - name: upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: modder-windows
-          path: ./Modder/build/libs/*
+          path: ./Modder/modder/build/libs/*
 
   ATG:
     runs-on: ubuntu-22.04
@@ -153,6 +175,17 @@ jobs:
       - name: build
         working-directory: ./ATG
         run: ./gradlew assembleDebug
+
+      - name: Check ATG artifacts
+        run: |
+          if [ -d "./ATG/app/build/outputs/apk/debug" ]; then
+            echo "ATG artifacts found:"
+            ls -la ./ATG/app/build/outputs/apk/debug/
+          else
+            echo "ATG artifacts not found"
+            mkdir -p ./ATG/app/build/outputs/apk/debug/
+            echo "No APK files generated" > ./ATG/app/build/outputs/apk/debug/README.txt
+          fi
 
       - name: upload artifacts
         if: always()
@@ -183,12 +216,23 @@ jobs:
         working-directory: ./billing-hack
         run: ./gradlew assembleDebug
 
+      - name: Check billing-hack artifacts
+        run: |
+          if [ -d "./billing-hack/app/build/outputs/apk/debug" ]; then
+            echo "billing-hack artifacts found:"
+            ls -la ./billing-hack/app/build/outputs/apk/debug/
+          else
+            echo "billing-hack artifacts not found"
+            mkdir -p ./billing-hack/app/build/outputs/apk/debug/
+            echo "No APK files generated" > ./billing-hack/app/build/outputs/apk/debug/README.txt
+          fi
+
       - name: upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: billing-hack
-          path: ./billing-hack/build/outputs/apk/debug/*
+          path: ./billing-hack/app/build/outputs/apk/debug/*
 
   # Android Release Build (with NDK for ACE)
   android-release:

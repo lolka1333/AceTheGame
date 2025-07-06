@@ -94,11 +94,11 @@ jobs:
           find ACE/release-android -name "*.so" -o -name "ace*" -type f | xargs -I {} cp {} release-package/
           
           # Copy Modder JAR
-          find Modder/build/libs -name "*.jar" | xargs -I {} cp {} release-package/
+          find Modder/modder/build/libs -name "*.jar" | xargs -I {} cp {} release-package/
           
           # Copy APK files
           find ATG/app/build/outputs/apk -name "*.apk" | xargs -I {} cp {} release-package/
-          find billing-hack/build/outputs/apk -name "*.apk" | xargs -I {} cp {} release-package/
+          find billing-hack/app/build/outputs/apk -name "*.apk" | xargs -I {} cp {} release-package/
           
           # Create documentation
           cp README.md release-package/

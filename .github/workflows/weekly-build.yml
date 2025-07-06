@@ -112,11 +112,11 @@ jobs:
           done
           
           # Copy Modder JAR
-          find Modder/build/libs -name "*.jar" | xargs -I {} cp {} weekly-snapshot/modder/
+          find Modder/modder/build/libs -name "*.jar" | xargs -I {} cp {} weekly-snapshot/modder/
           
           # Copy APK files
           find ATG/app/build/outputs/apk -name "*.apk" | xargs -I {} cp {} weekly-snapshot/apks/
-          find billing-hack/build/outputs/apk -name "*.apk" | xargs -I {} cp {} weekly-snapshot/apks/
+          find billing-hack/app/build/outputs/apk -name "*.apk" | xargs -I {} cp {} weekly-snapshot/apks/
           
           # Copy documentation
           cp README.md installation_guide.md changelog.md weekly-snapshot/docs/
