@@ -38,20 +38,34 @@ cp "$APK_FILE" "${APK_FILE}.backup"
 echo "Removing existing signatures if any..."
 zip -d "$APK_FILE" "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.DSA" "META-INF/MANIFEST.MF" 2>/dev/null || true
 
+# Additional cleanup for any remaining signature files
+echo "Performing thorough signature cleanup..."
+unzip -l "$APK_FILE" | grep -E 'META-INF/.*\.(SF|RSA|DSA)$' | awk '{print $4}' | xargs -I {} zip -d "$APK_FILE" {} 2>/dev/null || true
+
 # Sign the APK
 echo "Signing APK..."
-jarsigner -verbose \
+if jarsigner -verbose \
     -sigalg SHA256withRSA \
     -digestalg SHA256 \
     -keystore "$KEYSTORE_FILE" \
     -storepass "$KEYSTORE_PASSWORD" \
     -keypass "$KEY_PASSWORD" \
     -tsa http://timestamp.digicert.com \
-    "$APK_FILE" "$ALIAS"
+    "$APK_FILE" "$ALIAS"; then
+    echo "✓ APK signed successfully"
+else
+    echo "✗ Failed to sign APK"
+    exit 1
+fi
 
 # Verify the signature
 echo "Verifying signature..."
-jarsigner -verify -verbose -certs "$APK_FILE"
+if jarsigner -verify -verbose -certs "$APK_FILE"; then
+    echo "✓ Signature verification passed"
+else
+    echo "✗ Signature verification failed"
+    exit 1
+fi
 
 # Check if zipalign is available
 if command -v zipalign &> /dev/null; then
