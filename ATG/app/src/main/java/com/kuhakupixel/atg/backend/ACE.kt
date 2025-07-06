@@ -329,13 +329,20 @@ class ACE(context: Context) {
     fun ListRunningProcFull(): List<ProcInfo> {
         val runningProcs: MutableList<ProcInfo> = mutableListOf()
         try {
-            // Use standard Linux ps command to get full process names
-            // -e: all processes, -o: custom format, --no-headers: no header line
-            // comm shows the command name, args shows full command line
-            val cmd = listOf("ps", "-eo", "pid,comm", "--no-headers", "--sort=-pid")
+            // Use Toybox ps command (Android compatible)
+            // -e: all processes, -o: custom format, -w: wide output (don't truncate)
+            // -k: sort by field, -pid: sort by PID descending
+            val cmd = listOf("ps", "-eo", "pid,comm", "-w", "-k", "-pid")
             val processInfoLines = Root.sudo(cmd)
             
-            for (line in processInfoLines) {
+            // Skip the header line (first line contains "PID COMM")
+            val dataLines = if (processInfoLines.isNotEmpty()) {
+                processInfoLines.drop(1)
+            } else {
+                emptyList()
+            }
+            
+            for (line in dataLines) {
                 val trimmedLine = line.trim()
                 if (trimmedLine.isNotEmpty()) {
                     // Split by whitespace, taking first part as PID and rest as process name
@@ -362,11 +369,20 @@ class ACE(context: Context) {
     fun ListRunningProcWithArgs(): List<ProcInfo> {
         val runningProcs: MutableList<ProcInfo> = mutableListOf()
         try {
-            // Use args to get full command line with arguments
-            val cmd = listOf("ps", "-eo", "pid,args", "--no-headers", "--sort=-pid")
+            // Use Toybox ps command with args to get full command lines
+            // -e: all processes, -o: custom format, -w: wide output (don't truncate)
+            // -k: sort by field, -pid: sort by PID descending
+            val cmd = listOf("ps", "-eo", "pid,args", "-w", "-k", "-pid")
             val processInfoLines = Root.sudo(cmd)
             
-            for (line in processInfoLines) {
+            // Skip the header line (first line contains "PID ARGS")
+            val dataLines = if (processInfoLines.isNotEmpty()) {
+                processInfoLines.drop(1)
+            } else {
+                emptyList()
+            }
+            
+            for (line in dataLines) {
                 val trimmedLine = line.trim()
                 if (trimmedLine.isNotEmpty()) {
                     // Split by whitespace, taking first part as PID and rest as command line
@@ -382,6 +398,69 @@ class ACE(context: Context) {
         } catch (e: Exception) {
             // If the new method fails, fall back to the original method
             println("Failed to get process command lines, falling back to original method: ${e.message}")
+            return ListRunningProc()
+        }
+        return runningProcs
+    }
+
+    /**
+     * Get running processes using /proc filesystem for maximum detail
+     * This method reads directly from /proc/PID/cmdline and /proc/PID/comm
+     */
+    fun ListRunningProcFromProcFS(): List<ProcInfo> {
+        val runningProcs: MutableList<ProcInfo> = mutableListOf()
+        try {
+            // First get list of PIDs using ps
+            val cmd = listOf("ps", "-eo", "pid", "-w")
+            val processInfoLines = Root.sudo(cmd)
+            
+            // Skip the header line (first line contains "PID")
+            val dataLines = if (processInfoLines.isNotEmpty()) {
+                processInfoLines.drop(1)
+            } else {
+                emptyList()
+            }
+            
+            for (line in dataLines) {
+                val trimmedLine = line.trim()
+                if (trimmedLine.isNotEmpty() && trimmedLine.matches(Regex("\\d+"))) {
+                    val pid = trimmedLine
+                    try {
+                        // Try to read /proc/PID/cmdline for full command line
+                        val cmdlineCmd = listOf("cat", "/proc/$pid/cmdline")
+                        val cmdlineResult = Root.sudo(cmdlineCmd)
+                        
+                        if (cmdlineResult.isNotEmpty()) {
+                            val cmdline = cmdlineResult[0].replace('\u0000', ' ').trim()
+                            if (cmdline.isNotEmpty()) {
+                                runningProcs.add(ProcInfo("$pid $cmdline"))
+                                continue
+                            }
+                        }
+                        
+                        // If cmdline is empty, try /proc/PID/comm
+                        val commCmd = listOf("cat", "/proc/$pid/comm")
+                        val commResult = Root.sudo(commCmd)
+                        
+                        if (commResult.isNotEmpty()) {
+                            val comm = commResult[0].trim()
+                            if (comm.isNotEmpty()) {
+                                runningProcs.add(ProcInfo("$pid $comm"))
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Skip this PID if we can't read its info
+                        continue
+                    }
+                }
+            }
+            
+            // Sort by PID descending
+            runningProcs.sortByDescending { it.GetPidStr().toLongOrNull() ?: 0 }
+            
+        } catch (e: Exception) {
+            // If the new method fails, fall back to the original method
+            println("Failed to get process info from /proc, falling back to original method: ${e.message}")
             return ListRunningProc()
         }
         return runningProcs
