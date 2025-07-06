@@ -172,19 +172,39 @@ jobs:
           echo "JAVA_HOME=${JAVA_HOME}" >> $GITHUB_ENV
           echo "JAVA_HOME set to ${JAVA_HOME}"
 
-      - name: build
+      - name: Setup keystore for signing
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./ATG/app/release.keystore
+            echo "Using keystore from secrets"
+          else
+            echo "No keystore secret found, using local keystore"
+          fi
+
+      - name: build release
+        working-directory: ./ATG
+        env:
+          KEYSTORE_FILE: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'androiddebugkey' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
+        run: ./gradlew assembleRelease
+
+      - name: build debug (for regular builds)
+        if: github.event_name != 'release' && github.event_name != 'workflow_dispatch'
         working-directory: ./ATG
         run: ./gradlew assembleDebug
 
       - name: Check ATG artifacts
         run: |
+          if [ -d "./ATG/app/build/outputs/apk/release" ]; then
+            echo "ATG release artifacts found:"
+            ls -la ./ATG/app/build/outputs/apk/release/
+          fi
           if [ -d "./ATG/app/build/outputs/apk/debug" ]; then
-            echo "ATG artifacts found:"
+            echo "ATG debug artifacts found:"
             ls -la ./ATG/app/build/outputs/apk/debug/
-          else
-            echo "ATG artifacts not found"
-            mkdir -p ./ATG/app/build/outputs/apk/debug/
-            echo "No APK files generated" > ./ATG/app/build/outputs/apk/debug/README.txt
           fi
 
       - name: upload artifacts
@@ -192,7 +212,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: atg
-          path: ./ATG/app/build/outputs/apk/debug/*
+          path: |
+            ./ATG/app/build/outputs/apk/release/*
+            ./ATG/app/build/outputs/apk/debug/*
 
   billing-hack:
     runs-on: ubuntu-22.04
@@ -212,19 +234,39 @@ jobs:
           echo "JAVA_HOME=${JAVA_HOME}" >> $GITHUB_ENV
           echo "JAVA_HOME set to ${JAVA_HOME}"
 
-      - name: build
+      - name: Setup keystore for signing
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./billing-hack/app/release.keystore
+            echo "Using keystore from secrets"
+          else
+            echo "No keystore secret found, using local keystore"
+          fi
+
+      - name: build release
+        working-directory: ./billing-hack
+        env:
+          KEYSTORE_FILE: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'androiddebugkey' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
+        run: ./gradlew assembleRelease
+
+      - name: build debug (for regular builds)
+        if: github.event_name != 'release' && github.event_name != 'workflow_dispatch'
         working-directory: ./billing-hack
         run: ./gradlew assembleDebug
 
       - name: Check billing-hack artifacts
         run: |
+          if [ -d "./billing-hack/app/build/outputs/apk/release" ]; then
+            echo "billing-hack release artifacts found:"
+            ls -la ./billing-hack/app/build/outputs/apk/release/
+          fi
           if [ -d "./billing-hack/app/build/outputs/apk/debug" ]; then
-            echo "billing-hack artifacts found:"
+            echo "billing-hack debug artifacts found:"
             ls -la ./billing-hack/app/build/outputs/apk/debug/
-          else
-            echo "billing-hack artifacts not found"
-            mkdir -p ./billing-hack/app/build/outputs/apk/debug/
-            echo "No APK files generated" > ./billing-hack/app/build/outputs/apk/debug/README.txt
           fi
 
       - name: upload artifacts
@@ -232,7 +274,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: billing-hack
-          path: ./billing-hack/app/build/outputs/apk/debug/*
+          path: |
+            ./billing-hack/app/build/outputs/apk/release/*
+            ./billing-hack/app/build/outputs/apk/debug/*
 
   # Android Release Build (with NDK for ACE)
   android-release:
