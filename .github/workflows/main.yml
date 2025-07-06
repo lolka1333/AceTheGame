@@ -230,10 +230,10 @@ jobs:
             fi
             
             # Zipalign the APK
-            if command -v $ZIPALIGN &> /dev/null || [ -f "$ZIPALIGN" ]; then
+            if command -v "$ZIPALIGN" &> /dev/null || [ -f "$ZIPALIGN" ]; then
               echo "Zipaligning APK..."
               mv "$APK_PATH" "${APK_PATH}.unaligned"
-              $ZIPALIGN -v 4 "${APK_PATH}.unaligned" "$APK_PATH"
+              "$ZIPALIGN" -v 4 "${APK_PATH}.unaligned" "$APK_PATH"
               rm -f "${APK_PATH}.unaligned"
               echo "APK zipaligned successfully"
             else
@@ -345,10 +345,10 @@ jobs:
             fi
             
             # Zipalign the APK
-            if command -v $ZIPALIGN &> /dev/null || [ -f "$ZIPALIGN" ]; then
+            if command -v "$ZIPALIGN" &> /dev/null || [ -f "$ZIPALIGN" ]; then
               echo "Zipaligning APK..."
               mv "$APK_PATH" "${APK_PATH}.unaligned"
-              $ZIPALIGN -v 4 "${APK_PATH}.unaligned" "$APK_PATH"
+              "$ZIPALIGN" -v 4 "${APK_PATH}.unaligned" "$APK_PATH"
               rm -f "${APK_PATH}.unaligned"
               echo "APK zipaligned successfully"
             else
@@ -476,10 +476,10 @@ jobs:
               jarsigner -verify -verbose -certs "$APK_PATH"
               
               # Zipalign the APK
-              if command -v $ZIPALIGN &> /dev/null || [ -f "$ZIPALIGN" ]; then
+              if command -v "$ZIPALIGN" &> /dev/null || [ -f "$ZIPALIGN" ]; then
                 echo "Zipaligning APK..."
                 mv "$APK_PATH" "${APK_PATH}.unaligned"
-                $ZIPALIGN -v 4 "${APK_PATH}.unaligned" "$APK_PATH"
+                "$ZIPALIGN" -v 4 "${APK_PATH}.unaligned" "$APK_PATH"
                 rm -f "${APK_PATH}.unaligned"
                 echo "APK zipaligned successfully"
               else
