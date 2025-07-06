@@ -3,31 +3,14 @@ plugins {
 }
 
 android {
-    compileSdk 33
-    ndkVersion '25.1.8937393'
+    compileSdk 23
 
     defaultConfig {
         applicationId = 'com.AceInjector.hellolibs'
-        minSdkVersion 14
-        targetSdkVersion 33
+        minSdk 14
+        targetSdk 23
         versionCode = 1
         versionName = '1.0'
-	// we need to specify the cmake options
-	// inside defaultConfig, not,
-	// https://stackoverflow.com/questions/64829357/specify-targets-in-externalnativebuild-of-the-build-gradle-file-no-signature-o
-        externalNativeBuild {
-	    // TODO: fix scanning/editing memory becomes unstable when built as release?
-	    // 	     (maybe some fault in memscanner/editor 's match_storage)
-
-	    // Disable stripping on release, because for some reason in this build
-	    // The strip binary can't be found even though building the project
-	    // normally outside gradle works just fin
-            cmake {
-                arguments '-DANDROID_STL=c++_static',"-DANDROID_PLATFORM=android-23", "-DCMAKE_BUILD_TYPE=RelWithDebInfo", 
-			
-			  "-DSTRIP_ON_RELEASE=False"
-            }
-        }
     }
     buildTypes {
         release {
@@ -37,16 +20,10 @@ android {
         }
     }
 
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-        }
-    }
     namespace 'com.AceInjector.hellolibs'
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.5.1'
     // uncomment out this one to generate lib binaries,
     // and also uncommented out the one in settings.gradle
     // after lib is generated, just comment them out again

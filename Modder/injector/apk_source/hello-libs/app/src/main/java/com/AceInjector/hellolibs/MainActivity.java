@@ -15,7 +15,7 @@
  */
 package com.AceInjector.hellolibs;
 
-import androidx.appcompat.app.AppCompatActivity;
+import android.app.Activity;
 import android.os.Bundle;
 import android.widget.TextView;
 
@@ -25,7 +25,7 @@ import com.AceInjector.utils.Injector;
  * Simple Java UI to trigger jni function. It is exactly same as Java code
  * in hello-jni.
  */
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
 
 	String calc_something() {
 		return "difwiew";
