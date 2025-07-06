@@ -55,10 +55,10 @@ git push origin v1.0.0
 **Использование Docker образа:**
 ```bash
 # Скачать образ
-docker pull ghcr.io/kuhakupixel/acethegame:latest
+docker pull ghcr.io/lolka1333/acethegame:latest
 
 # Запустить контейнер
-docker run -it ghcr.io/kuhakupixel/acethegame:latest
+docker run -it ghcr.io/lolka1333/acethegame:latest
 ```
 
 ### 4. **Weekly Development Build** (`weekly-build.yml`)

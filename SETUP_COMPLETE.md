@@ -87,7 +87,7 @@
 - ✅ **ACE binary**: `ACE-vX.X.X.tar.gz`
 - ✅ **Modder JAR**: `Modder-vX.X.X.tar.gz`
 - ✅ **Android APKs**: `AndroidApps-vX.X.X.tar.gz`
-- ✅ **Docker images**: `ghcr.io/kuhakupixel/acethegame:latest`
+- ✅ **Docker images**: `ghcr.io/lolka1333/acethegame:latest`
 - ✅ **Weekly snapshots**: `weekly-YYYY-MM-DD` releases
 
 ### Multi-platform support
@@ -116,7 +116,7 @@ git push origin v1.0.0
 ### Скачивание файлов
 1. **Официальные релизы**: https://github.com/KuhakuPixel/AceTheGame/releases
 2. **Development builds**: https://github.com/KuhakuPixel/AceTheGame/actions
-3. **Docker images**: `docker pull ghcr.io/kuhakupixel/acethegame:latest`
+3. **Docker images**: `docker pull ghcr.io/lolka1333/acethegame:latest`
 
 ### Запуск тестов
 1. GitHub Actions → "Test All Workflows" → "Run workflow"

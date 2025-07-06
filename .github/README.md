@@ -52,8 +52,8 @@ git push origin v1.0.0
 
 ### Запустить Docker:
 ```bash
-docker pull ghcr.io/kuhakupixel/acethegame:latest
-docker run -it ghcr.io/kuhakupixel/acethegame:latest
+docker pull ghcr.io/lolka1333/acethegame:latest
+docker run -it ghcr.io/lolka1333/acethegame:latest
 ```
 
 ## 📖 Документация

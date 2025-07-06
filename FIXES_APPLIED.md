@@ -14,6 +14,11 @@ Modder-windows: No files were found with the provided path: ./Modder/build/libs/
 System.IO.IOException: No space left on device
 ```
 
+### 3. Docker repository name lowercase error
+```
+docker: invalid reference format: repository name (lolka1333/AceTheGame) must be lowercase
+```
+
 ## ✅ Применённые исправления:
 
 ### 1. Исправлены пути к артефактам
@@ -80,6 +85,19 @@ sudo apt-get autoremove -y
 docker system prune -a -f
 ```
 
+### 5. Исправление Docker repository name lowercase
+
+**Проблема:** Docker требует lowercase имена, но `${{ github.repository }}` содержит заглавные буквы.
+
+**Решение:**
+```yaml
+- name: Set lowercase repository name
+  run: |
+    echo "REPO_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+```
+
+**Результат:** `lolka1333/AceTheGame` → `lolka1333/acethegame`
+
 ## 📁 Измененные файлы:
 
 1. **`.github/workflows/main.yml`** - Исправлены пути и добавлены проверки
@@ -87,14 +105,18 @@ docker system prune -a -f
 3. **`.github/workflows/weekly-build.yml`** - Исправлены пути для копирования
 4. **`.github/workflows/docker.yml`** - Добавлена очистка диска, убран ARM64
 5. **`.github/workflows/docker-multiplatform.yml`** - Новый workflow для multi-platform
-6. **`SETUP_COMPLETE.md`** - Обновлена документация
+6. **`SETUP_COMPLETE.md`** - Обновлена документация  
 7. **`FIXES_APPLIED.md`** - Этот файл с описанием исправлений
+8. **`DOCKER_LOWERCASE_FIX.md`** - Подробное описание исправления Docker lowercase
+9. **`.github/README.md`** - Обновлены Docker примеры
+10. **`GITHUB_ACTIONS_GUIDE.md`** - Обновлены Docker примеры
 
 ## 🎯 Результат:
 
 ### ✅ Теперь работает:
 - Все артефакты находятся и загружаются корректно
 - Docker сборка проходит без ошибок нехватки места
+- Docker образы используют правильные lowercase имена
 - Multi-platform Docker образы собираются отдельно
 - Есть проверки и fallback для отсутствующих файлов
 
@@ -103,7 +125,8 @@ docker system prune -a -f
 - **Modder JAR** - Linux и Windows сборка
 - **ATG APK** - Android приложение
 - **billing-hack APK** - Android приложение  
-- **Docker images** - Single platform (linux/amd64) и Multi-platform (linux/amd64,linux/arm64)
+- **Docker images** - Single platform (linux/amd64): `ghcr.io/lolka1333/acethegame:latest`
+- **Docker images** - Multi-platform (linux/amd64,linux/arm64): `ghcr.io/lolka1333/acethegame:latest-multiplatform`
 
 ## 📊 Статус workflows:
 
@@ -111,11 +134,18 @@ docker system prune -a -f
 |----------|--------|----------|
 | Main CI/CD | ✅ Исправлен | Пути исправлены, проверки добавлены |
 | Release | ✅ Исправлен | Пути исправлены для копирования |
-| Docker | ✅ Исправлен | Очистка диска, только AMD64 |
-| Docker Multi-Platform | ✅ Новый | Отдельный workflow для ARM64+AMD64 |
+| Docker | ✅ Исправлен | Очистка диска, только AMD64, lowercase имена |
+| Docker Multi-Platform | ✅ Новый | Отдельный workflow для ARM64+AMD64, lowercase имена |
 | Weekly Build | ✅ Исправлен | Пути исправлены |
 | Security Audit | ✅ Без изменений | Работал корректно |
 
 ## 🎉 Готово!
 
-Все проблемы исправлены. GitHub Actions теперь работает корректно и все файлы доступны для скачивания!
+Все проблемы исправлены:
+- ✅ Пути к артефактам исправлены
+- ✅ Docker сборка работает без ошибок места на диске  
+- ✅ Docker имена в lowercase формате
+- ✅ Multi-platform Docker builds
+- ✅ Проверки и fallback для артефактов
+
+GitHub Actions теперь работает корректно и все файлы доступны для скачивания!
