@@ -20,6 +20,7 @@
 | 6 | `ACE.kt` | Ошибки в Attach, нет проверки сервера | ✅ ИСПРАВЛЕНО |
 | 7 | `Process.kt` | Неполная обработка исключений | ✅ ИСПРАВЛЕНО |
 | 8 | `MemoryUtil.kt` | Вылеты при сканировании памяти | ✅ ИСПРАВЛЕНО |
+| 9 | `Memory.kt` | Вылеты при обновлении результатов сканирования | ✅ ИСПРАВЛЕНО |
 
 ## 🛡️ Добавленные улучшения
 
@@ -109,6 +110,28 @@ if (!ace.IsAttached()) {
 if (!ace.IsServerResponsive()) {
     onScanError("ACE server is not responding...")
     return
+}
+```
+
+### Memory.kt
+```kotlin
+// Безопасное обновление результатов
+private fun UpdateMatches(ace: ACE) {
+    if (!ace.IsAttached() || !ace.IsServerResponsive()) {
+        currentMatchesList.value = emptyList()
+        matchesStatusText.value = "Server not responding"
+        return
+    }
+    // ... update matches safely
+}
+
+// Защищённые callbacks
+onScanDone = {
+    if (ace.IsAttached() && ace.IsServerResponsive()) {
+        UpdateMatches(ace = ace)
+    } else {
+        matchesStatusText.value = "Connection lost during scan"
+    }
 }
 ```
 
