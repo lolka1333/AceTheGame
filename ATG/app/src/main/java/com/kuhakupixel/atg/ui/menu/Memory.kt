@@ -261,21 +261,16 @@ fun _MemoryMenu(
                             android.util.Log.w("ATG", "Cannot start new scan: not attached to any process")
                             currentMatchesList.value = emptyList()
                             matchesStatusText.value = "Not attached to any process"
-                            return@newScanClicked
-                        }
-                        
-                        if (!ace.IsServerResponsive()) {
+                        } else if (!ace.IsServerResponsive()) {
                             android.util.Log.w("ATG", "Cannot start new scan: ACE server is not responsive")
                             currentMatchesList.value = emptyList()
                             matchesStatusText.value = "Server not responding"
-                            return@newScanClicked
+                        } else {
+                            ace.ResetMatches()
+                            UpdateMatches(ace = ace)
+                            initialScanDone.value = false
+                            android.util.Log.d("ATG", "New scan started successfully")
                         }
-                        
-                        ace.ResetMatches()
-                        UpdateMatches(ace = ace)
-                        initialScanDone.value = false
-                        android.util.Log.d("ATG", "New scan started successfully")
-                        
                     } catch (e: Exception) {
                         android.util.Log.e("ATG", "Error starting new scan: ${e.message}", e)
                         currentMatchesList.value = emptyList()
