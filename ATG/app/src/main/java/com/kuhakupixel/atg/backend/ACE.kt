@@ -130,11 +130,47 @@ class ACE(context: Context) {
     
     fun Attach(pid: Long) {
         AssertNoAttachInARow()
-        // start the server
-        val ports: List<Int> = Port.GetOpenPorts(2)
-        serverThread = ACEServer.GetStarterThread(context, pid, ports[0], ports[1])
-        serverThread!!.start()
-        ConnectToACEServer(ports[0], ports[1])
+        try {
+            // start the server
+            val ports: List<Int> = Port.GetOpenPorts(2)
+            serverThread = ACEServer.GetStarterThread(context, pid, ports[0], ports[1])
+            serverThread!!.start()
+            
+            // Give the server some time to start
+            Thread.sleep(1000)
+            
+            // Check if the server thread is still alive (not crashed)
+            if (!serverThread!!.isAlive) {
+                throw RuntimeException("ACE server thread died unexpectedly")
+            }
+            
+            ConnectToACEServer(ports[0], ports[1])
+            
+            // Verify that we can communicate with the server
+            try {
+                GetAttachedPid()
+            } catch (e: Exception) {
+                throw RuntimeException("Failed to communicate with ACE server after attach", e)
+            }
+            
+        } catch (e: Exception) {
+            // Clean up if attach failed
+            if (aceAttachClient != null) {
+                try {
+                    aceAttachClient!!.close()
+                } catch (ignored: Exception) {
+                }
+                aceAttachClient = null
+            }
+            if (serverThread != null) {
+                try {
+                    serverThread!!.interrupt()
+                } catch (ignored: Exception) {
+                }
+                serverThread = null
+            }
+            throw RuntimeException("Failed to attach to process $pid", e)
+        }
     }
 
     
@@ -335,29 +371,45 @@ class ACE(context: Context) {
             val cmd = listOf("ps", "-eo", "pid,comm", "-w", "-k", "-pid")
             val processInfoLines = Root.sudo(cmd)
             
-            // Skip the header line (first line contains "PID COMM")
-            val dataLines = if (processInfoLines.isNotEmpty()) {
-                processInfoLines.drop(1)
-            } else {
-                emptyList()
+            if (processInfoLines.isEmpty()) {
+                android.util.Log.w("ATG", "No output from ps command")
+                return ListRunningProc() // Fallback to original method
             }
+            
+            // Skip the header line (first line contains "PID COMM")
+            val dataLines = processInfoLines.drop(1)
             
             for (line in dataLines) {
                 val trimmedLine = line.trim()
-                if (trimmedLine.isNotEmpty()) {
-                    // Split by whitespace, taking first part as PID and rest as process name
-                    val parts = trimmedLine.split(Regex("\\s+"), 2)
-                    if (parts.size >= 2) {
-                        val pid = parts[0]
-                        val processName = parts[1]
-                        // Create ProcInfo with "pid processname" format
-                        runningProcs.add(ProcInfo("$pid $processName"))
+                if (trimmedLine.isNotEmpty() && !trimmedLine.startsWith("__EXIT_CODE__")) {
+                    try {
+                        // Split by whitespace, taking first part as PID and rest as process name
+                        val parts = trimmedLine.split(Regex("\\s+"), 2)
+                        if (parts.size >= 2) {
+                            val pid = parts[0]
+                            val processName = parts[1]
+                            
+                            // Validate PID is numeric
+                            if (pid.toLongOrNull() != null) {
+                                // Create ProcInfo with "pid processname" format
+                                runningProcs.add(ProcInfo("$pid $processName"))
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("ATG", "Failed to parse process line: $trimmedLine", e)
+                        // Continue with other lines
                     }
                 }
             }
+            
+            if (runningProcs.isEmpty()) {
+                android.util.Log.w("ATG", "No valid processes found with ps command")
+                return ListRunningProc() // Fallback to original method
+            }
+            
         } catch (e: Exception) {
             // If the new method fails, fall back to the original method
-            println("Failed to get full process names, falling back to original method: ${e.message}")
+            android.util.Log.w("ATG", "Failed to get full process names, falling back to original method: ${e.message}")
             return ListRunningProc()
         }
         return runningProcs
@@ -375,29 +427,45 @@ class ACE(context: Context) {
             val cmd = listOf("ps", "-eo", "pid,args", "-w", "-k", "-pid")
             val processInfoLines = Root.sudo(cmd)
             
-            // Skip the header line (first line contains "PID ARGS")
-            val dataLines = if (processInfoLines.isNotEmpty()) {
-                processInfoLines.drop(1)
-            } else {
-                emptyList()
+            if (processInfoLines.isEmpty()) {
+                android.util.Log.w("ATG", "No output from ps command")
+                return ListRunningProc() // Fallback to original method
             }
+            
+            // Skip the header line (first line contains "PID ARGS")
+            val dataLines = processInfoLines.drop(1)
             
             for (line in dataLines) {
                 val trimmedLine = line.trim()
-                if (trimmedLine.isNotEmpty()) {
-                    // Split by whitespace, taking first part as PID and rest as command line
-                    val parts = trimmedLine.split(Regex("\\s+"), 2)
-                    if (parts.size >= 2) {
-                        val pid = parts[0]
-                        val commandLine = parts[1]
-                        // Create ProcInfo with "pid commandline" format
-                        runningProcs.add(ProcInfo("$pid $commandLine"))
+                if (trimmedLine.isNotEmpty() && !trimmedLine.startsWith("__EXIT_CODE__")) {
+                    try {
+                        // Split by whitespace, taking first part as PID and rest as command line
+                        val parts = trimmedLine.split(Regex("\\s+"), 2)
+                        if (parts.size >= 2) {
+                            val pid = parts[0]
+                            val commandLine = parts[1]
+                            
+                            // Validate PID is numeric
+                            if (pid.toLongOrNull() != null) {
+                                // Create ProcInfo with "pid commandline" format
+                                runningProcs.add(ProcInfo("$pid $commandLine"))
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("ATG", "Failed to parse process line: $trimmedLine", e)
+                        // Continue with other lines
                     }
                 }
             }
+            
+            if (runningProcs.isEmpty()) {
+                android.util.Log.w("ATG", "No valid processes found with ps command")
+                return ListRunningProc() // Fallback to original method
+            }
+            
         } catch (e: Exception) {
             // If the new method fails, fall back to the original method
-            println("Failed to get process command lines, falling back to original method: ${e.message}")
+            android.util.Log.w("ATG", "Failed to get process command lines, falling back to original method: ${e.message}")
             return ListRunningProc()
         }
         return runningProcs

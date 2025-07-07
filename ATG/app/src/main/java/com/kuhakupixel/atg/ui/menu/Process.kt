@@ -58,33 +58,58 @@ private fun AttachToProcess(
     onAttachSuccess: () -> Unit,
     onAttachFailure: (msg: String) -> Unit,
 ) {
-
-    // check if its still alive
-    if (!ace!!.IsPidRunning(pid)) {
-        onProcessNoExistAnymore()
+    if (ace == null) {
+        onAttachFailure("ACE is not initialized")
         return
     }
-    // DeAttach first if we have been attached previously
-    if (ace.IsAttached()) {
-        ace.DeAttach()
-    }
-    // attach
-    ace.Attach(pid)
-    var attachedPid: Long = -1
+
     try {
-        attachedPid = ace.GetAttachedPid()
+        // check if its still alive
+        if (!ace.IsPidRunning(pid)) {
+            onProcessNoExistAnymore()
+            return
+        }
+        
+        // DeAttach first if we have been attached previously
+        if (ace.IsAttached()) {
+            try {
+                ace.DeAttach()
+            } catch (e: Exception) {
+                android.util.Log.w("ATG", "Failed to detach from previous process: ${e.message}")
+                // Continue anyway, try to attach to new process
+            }
+        }
+        
+        // attach
+        try {
+            ace.Attach(pid)
+        } catch (e: Exception) {
+            onAttachFailure("Failed to attach to process $pid: ${e.message}")
+            return
+        }
+        
+        // Verify attachment
+        var attachedPid: Long = -1
+        try {
+            attachedPid = ace.GetAttachedPid()
+        } catch (e: Exception) {
+            onAttachFailure("Unable to verify attachment to process $pid: ${e.message}")
+            return
+        }
+        
+        // final check to see if we are attached
+        // to the correct process
+        if (attachedPid == pid) {
+            onAttachSuccess()
+        } else {
+            onAttachFailure("Attachment verification failed: expected PID $pid, but got $attachedPid")
+        }
+        
     } catch (e: Exception) {
-        onAttachFailure("Unable to attach to process:  ${e.stackTraceToString()}")
-        return
+        // Catch any unexpected exceptions
+        android.util.Log.e("ATG", "Unexpected error in AttachToProcess: ${e.message}", e)
+        onAttachFailure("Unexpected error: ${e.message}")
     }
-    // final check to see if we are attached
-    // to the correct process
-    if (attachedPid == pid) {
-        onAttachSuccess()
-    } else {
-        onAttachFailure("Unexpected Error, cannot attach to $pid")
-    }
-
 }
 
 @Composable
@@ -245,14 +270,45 @@ private fun _ProcessMenu(
 fun refreshProcList(ace: ACE?, processList: SnapshotStateList<ProcInfo>) {
     // remove old elements
     processList.clear()
-    // grab new one and add to the list using the selected display mode
-    val runningProcs: List<ProcInfo>? = when (processDisplayMode.value) {
-        ProcessDisplayMode.ORIGINAL -> ace!!.ListRunningProc()
-        ProcessDisplayMode.FULL_NAME -> ace!!.ListRunningProcFull()
-        ProcessDisplayMode.FULL_COMMAND -> ace!!.ListRunningProcWithArgs()
+    
+    if (ace == null) {
+        android.util.Log.e("ATG", "ACE is null in refreshProcList")
+        return
     }
-    if (runningProcs != null) {
-        for (proc in runningProcs) processList.add(proc)
+    
+    try {
+        // grab new one and add to the list using the selected display mode
+        val runningProcs: List<ProcInfo>? = when (processDisplayMode.value) {
+            ProcessDisplayMode.ORIGINAL -> ace.ListRunningProc()
+            ProcessDisplayMode.FULL_NAME -> ace.ListRunningProcFull()
+            ProcessDisplayMode.FULL_COMMAND -> ace.ListRunningProcWithArgs()
+        }
+        
+        if (runningProcs != null && runningProcs.isNotEmpty()) {
+            for (proc in runningProcs) {
+                processList.add(proc)
+            }
+            android.util.Log.d("ATG", "Successfully loaded ${runningProcs.size} processes")
+        } else {
+            android.util.Log.w("ATG", "No processes found or null result from process list")
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("ATG", "Error refreshing process list: ${e.message}", e)
+        // Try to fallback to original method if we were using an alternative mode
+        if (processDisplayMode.value != ProcessDisplayMode.ORIGINAL) {
+            try {
+                android.util.Log.i("ATG", "Trying fallback to original process listing method")
+                val fallbackProcs = ace.ListRunningProc()
+                if (fallbackProcs != null) {
+                    for (proc in fallbackProcs) {
+                        processList.add(proc)
+                    }
+                    android.util.Log.d("ATG", "Fallback successful, loaded ${fallbackProcs.size} processes")
+                }
+            } catch (e2: Exception) {
+                android.util.Log.e("ATG", "Fallback also failed: ${e2.message}", e2)
+            }
+        }
     }
 }
 
