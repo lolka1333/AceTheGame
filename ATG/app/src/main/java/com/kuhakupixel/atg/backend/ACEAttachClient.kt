@@ -46,12 +46,12 @@ class ACEAttachClient(port: Int) : ACEBaseClient(), Closeable {
         val requestCmdStr: String = requestCmd.joinToString(separator = " ")
         
         try {
-            val sent = socket.send(requestCmdStr.toByteArray(ZMQ.CHARSET), ZMQ.DONTWAIT)
+            val sent = socket.send(requestCmdStr.toByteArray(ZMQ.CHARSET), 0)
             if (!sent) {
                 throw RuntimeException("Failed to send command to ACE server")
             }
             
-            val reply: ByteArray = socket.recv(ZMQ.DONTWAIT)
+            val reply: ByteArray = socket.recv(0)
                 ?: throw RuntimeException("Failed to receive response from ACE server")
                 
             val outStr = String(reply, ZMQ.CHARSET)

@@ -34,7 +34,7 @@ object Port {
                     if (attempt == maxRetries) {
                         throw RuntimeException("Failed to get $portCount open ports after $maxRetries attempts", e)
                     }
-                    Thread.sleep(100 * attempt) // Back off before retry
+                    Thread.sleep((100 * attempt).toLong()) // Back off before retry
                     continue
                 }
                 
@@ -56,7 +56,7 @@ object Port {
                 if (attempt == maxRetries) {
                     throw RuntimeException("Failed to get open ports after $maxRetries attempts", e)
                 }
-                Thread.sleep(100 * attempt) // Back off before retry
+                Thread.sleep((100 * attempt).toLong()) // Back off before retry
             }
         }
         
