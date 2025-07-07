@@ -202,8 +202,15 @@ fun _MemoryMenu(
                 //
                 nextScanEnabled = isAttached && !isScanOnGoing.value,
                 nextScanClicked = fun() {
+                    val currentScanOption = getCurrentScanOption()
+                    
+                    // Warn user about intensive all_read_write operation
+                    if (currentScanOption.regionLevel == ACE.RegionLevel.all_read_write) {
+                        android.util.Log.w("ATG", "Starting all_read_write scan - this may take several minutes")
+                    }
+                    
                     onNextScanClicked(
-                        scanOptions = getCurrentScanOption(),
+                        scanOptions = currentScanOption,
                         ace = ace,
                         onBeforeScanStart = {
                             // disable next and new scan

@@ -83,6 +83,10 @@ fun onNextScanClicked(
             
             // Provide more detailed error messages based on the exception
             val userMessage = when {
+                e.message?.contains("Intensive memory scan failed") == true -> 
+                    "All Read/Write scan failed: This operation scans all memory regions and may be too resource-intensive for this device or take too long. Try using a more specific region level like 'heap' or 'stack' instead."
+                e.message?.contains("all_read_write scan operation timed out") == true -> 
+                    "All Read/Write scan timed out: This operation scans all memory regions and took too long to complete. Try using a more specific region level like 'heap' or 'stack' for better performance."
                 e.message?.contains("Failed to communicate with ACE server") == true -> 
                     "Lost connection to the target process. The process may have crashed or been terminated. Please reattach to continue."
                 e.message?.contains("ACE server not responding") == true -> 
@@ -104,6 +108,10 @@ fun onNextScanClicked(
         // Extract the root cause from CompletionException
         val rootCause = e.cause ?: e
         val userMessage = when {
+            rootCause.message?.contains("Intensive memory scan failed") == true -> 
+                "All Read/Write scan failed: This operation scans all memory regions and may be too resource-intensive for this device or take too long. Try using a more specific region level like 'heap' or 'stack' instead."
+            rootCause.message?.contains("all_read_write scan operation timed out") == true -> 
+                "All Read/Write scan timed out: This operation scans all memory regions and took too long to complete. Try using a more specific region level like 'heap' or 'stack' for better performance."
             rootCause.message?.contains("Failed to communicate with ACE server") == true -> 
                 "Lost connection to the target process. The process may have crashed or been terminated. Please reattach to continue."
             rootCause.message?.contains("ACE server not responding") == true -> 
