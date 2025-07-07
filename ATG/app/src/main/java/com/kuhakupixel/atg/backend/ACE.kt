@@ -110,12 +110,79 @@ class ACE(context: Context) {
         return aceAttachClient != null
     }
 
+    /**
+     * Check if client exists (regardless of server responsiveness)
+     */
+    fun HasClient(): Boolean {
+        return aceAttachClient != null
+    }
+
     private fun AssertAttached() {
         if (!IsAttached()) throw NoAttachException("Operation requires attaching to a process, but it hasn't been attached")
     }
 
     private fun AssertNoAttachInARow() {
-        if (IsAttached()) throw AttachingInARowException("Cannot Attach without DeAttaching first")
+        if (IsAttached()) {
+            android.util.Log.w("ATG", "Already attached, attempting to detach first")
+            try {
+                // Try normal detach first
+                if (IsServerResponsive()) {
+                    DeAttach()
+                } else {
+                    android.util.Log.w("ATG", "Server not responsive, using force detach")
+                    ForceDetach()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ATG", "Failed to detach, using force detach: ${e.message}")
+                ForceDetach()
+            }
+        }
+    }
+
+    /**
+     * Force detach without server communication - use when server is unresponsive
+     */
+    fun ForceDetach() {
+        android.util.Log.i("ATG", "Force detaching from process")
+        
+        try {
+            // Close attach client if exists
+            if (aceAttachClient != null) {
+                try {
+                    aceAttachClient!!.close()
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Error closing attach client during force detach: ${e.message}")
+                }
+                aceAttachClient = null
+            }
+            
+            // Clear status publisher port
+            statusPublisherPort = null
+            
+            // Interrupt server thread if exists
+            if (serverThread != null) {
+                try {
+                    if (serverThread!!.isAlive) {
+                        serverThread!!.interrupt()
+                        // Give it a moment to clean up, but don't wait forever
+                        Thread.sleep(100)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Error interrupting server thread during force detach: ${e.message}")
+                } finally {
+                    serverThread = null
+                }
+            }
+            
+            android.util.Log.i("ATG", "Force detach completed successfully")
+            
+        } catch (e: Exception) {
+            android.util.Log.e("ATG", "Error during force detach: ${e.message}", e)
+            // Ensure cleanup even if something goes wrong
+            aceAttachClient = null
+            serverThread = null
+            statusPublisherPort = null
+        }
     }
 
     fun ConnectToACEServer(port: Int, publisherPort: Int) {
@@ -130,25 +197,95 @@ class ACE(context: Context) {
     
     fun Attach(pid: Long) {
         AssertNoAttachInARow()
-        // start the server
-        val ports: List<Int> = Port.GetOpenPorts(2)
-        serverThread = ACEServer.GetStarterThread(context, pid, ports[0], ports[1])
-        serverThread!!.start()
-        ConnectToACEServer(ports[0], ports[1])
+        try {
+            // start the server
+            val ports: List<Int> = Port.GetOpenPorts(2)
+            serverThread = ACEServer.GetStarterThread(context, pid, ports[0], ports[1])
+            serverThread!!.start()
+            
+            // Give the server some time to start
+            Thread.sleep(1000)
+            
+            // Check if the server thread is still alive (not crashed)
+            if (!serverThread!!.isAlive) {
+                throw RuntimeException("ACE server thread died unexpectedly")
+            }
+            
+            ConnectToACEServer(ports[0], ports[1])
+            
+            // Verify that we can communicate with the server
+            try {
+                GetAttachedPid()
+            } catch (e: Exception) {
+                throw RuntimeException("Failed to communicate with ACE server after attach", e)
+            }
+            
+        } catch (e: Exception) {
+            // Clean up if attach failed
+            if (aceAttachClient != null) {
+                try {
+                    aceAttachClient!!.close()
+                } catch (ignored: Exception) {
+                }
+                aceAttachClient = null
+            }
+            if (serverThread != null) {
+                try {
+                    serverThread!!.interrupt()
+                } catch (ignored: Exception) {
+                }
+                serverThread = null
+            }
+            throw RuntimeException("Failed to attach to process $pid", e)
+        }
     }
 
     
     fun DeAttach() {
         AssertAttached()
-        // tell server to die
-        aceAttachClient!!.Request(arrayOf("stop"))
-        aceAttachClient!!.close()
-        aceAttachClient = null
-        // only stop the server if we start one
-        if (serverThread != null) {
-            // wait for server's thread to finish
-            // to make sure we are not attached anymore
-            serverThread!!.join()
+        try {
+            android.util.Log.i("ATG", "Starting normal detach process")
+            
+            // tell server to die
+            if (aceAttachClient != null) {
+                try {
+                    aceAttachClient!!.Request(arrayOf("stop"))
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Failed to send stop command to server: ${e.message}")
+                }
+                
+                try {
+                    aceAttachClient!!.close()
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Failed to close attach client: ${e.message}")
+                }
+                aceAttachClient = null
+            }
+            
+            // Clear status publisher port
+            statusPublisherPort = null
+            
+            // only stop the server if we start one
+            if (serverThread != null) {
+                try {
+                    // wait for server's thread to finish with timeout
+                    serverThread!!.join(5000) // 5 seconds timeout
+                    if (serverThread!!.isAlive) {
+                        android.util.Log.w("ATG", "Server thread didn't finish in time, interrupting")
+                        serverThread!!.interrupt()
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Error waiting for server thread: ${e.message}")
+                } finally {
+                    serverThread = null
+                }
+            }
+            
+            android.util.Log.i("ATG", "Normal detach completed successfully")
+            
+        } catch (e: Exception) {
+            android.util.Log.e("ATG", "Error during detach, performing force detach: ${e.message}")
+            ForceDetach()
         }
     }
 
@@ -168,17 +305,106 @@ class ACE(context: Context) {
     // =============== this commands require attach ===================
     fun CheaterCmd(cmd: Array<String>): String {
         AssertAttached()
-        return aceAttachClient!!.Request(cmd)
+        
+        try {
+            // Check if server is alive before sending command
+            if (aceAttachClient is ACEAttachClient && !(aceAttachClient as ACEAttachClient).isServerAlive()) {
+                throw RuntimeException("ACE server connection is not alive")
+            }
+            
+            return aceAttachClient!!.Request(cmd)
+            
+        } catch (e: RuntimeException) {
+            android.util.Log.e("ATG", "Error in CheaterCmd: ${e.message}")
+            
+            // If it's a communication error, we might need to restart the connection
+            if (e.message?.contains("Failed to communicate with ACE server") == true || 
+                e.message?.contains("ACE server not responding") == true) {
+                
+                android.util.Log.w("ATG", "ACE server appears to be unresponsive, connection may need to be reset")
+                
+                // Mark client as disconnected to prevent further attempts
+                if (aceAttachClient is ACEAttachClient) {
+                    (aceAttachClient as ACEAttachClient).resetConnection()
+                }
+            }
+            
+            throw RuntimeException("Failed to execute command on ACE server: ${cmd.joinToString(" ")}", e)
+        }
     }
 
     fun CheaterCmdAsList(cmd: Array<String>): List<String> {
         AssertAttached()
-        return aceAttachClient!!.RequestAsList(cmd)
+        
+        try {
+            // Check if server is alive before sending command
+            if (aceAttachClient is ACEAttachClient && !(aceAttachClient as ACEAttachClient).isServerAlive()) {
+                throw RuntimeException("ACE server connection is not alive")
+            }
+            
+            return aceAttachClient!!.RequestAsList(cmd)
+            
+        } catch (e: RuntimeException) {
+            android.util.Log.e("ATG", "Error in CheaterCmdAsList: ${e.message}")
+            
+            // If it's a communication error, we might need to restart the connection
+            if (e.message?.contains("Failed to communicate with ACE server") == true || 
+                e.message?.contains("ACE server not responding") == true) {
+                
+                android.util.Log.w("ATG", "ACE server appears to be unresponsive, connection may need to be reset")
+                
+                // Mark client as disconnected to prevent further attempts
+                if (aceAttachClient is ACEAttachClient) {
+                    (aceAttachClient as ACEAttachClient).resetConnection()
+                }
+            }
+            
+            throw RuntimeException("Failed to execute command on ACE server: ${cmd.joinToString(" ")}", e)
+        }
     }
 
     fun GetAttachedPid(): Long {
         val pidStr = CheaterCmd(arrayOf("pid"))
         return pidStr.toLong()
+    }
+    
+    /**
+     * Check if the ACE server is responsive
+     */
+    fun IsServerResponsive(): Boolean {
+        if (aceAttachClient == null) {
+            return false
+        }
+        
+        try {
+            // Quick responsiveness check - try to get PID
+            val pidStr = aceAttachClient!!.Request(arrayOf("pid"))
+            return pidStr.isNotEmpty() && pidStr.toLongOrNull() != null
+        } catch (e: Exception) {
+            android.util.Log.w("ATG", "ACE server responsiveness check failed: ${e.message}")
+            return false
+        }
+    }
+    
+    /**
+     * Get server status information for debugging
+     */
+    fun GetServerStatus(): String {
+        return if (!IsAttached()) {
+            "Not attached to any process"
+        } else {
+            try {
+                val pid = GetAttachedPid()
+                val alive = if (aceAttachClient is ACEAttachClient) {
+                    (aceAttachClient as ACEAttachClient).isServerAlive()
+                } else {
+                    "Unknown"
+                }
+                "Attached to PID: $pid, Connection alive: $alive"
+            } catch (e: Exception) {
+                "Attached but server not responding: ${e.message}"
+            }
+        }
     }
 
     
@@ -335,29 +561,45 @@ class ACE(context: Context) {
             val cmd = listOf("ps", "-eo", "pid,comm", "-w", "-k", "-pid")
             val processInfoLines = Root.sudo(cmd)
             
-            // Skip the header line (first line contains "PID COMM")
-            val dataLines = if (processInfoLines.isNotEmpty()) {
-                processInfoLines.drop(1)
-            } else {
-                emptyList()
+            if (processInfoLines.isEmpty()) {
+                android.util.Log.w("ATG", "No output from ps command")
+                return ListRunningProc() // Fallback to original method
             }
+            
+            // Skip the header line (first line contains "PID COMM")
+            val dataLines = processInfoLines.drop(1)
             
             for (line in dataLines) {
                 val trimmedLine = line.trim()
-                if (trimmedLine.isNotEmpty()) {
-                    // Split by whitespace, taking first part as PID and rest as process name
-                    val parts = trimmedLine.split(Regex("\\s+"), 2)
-                    if (parts.size >= 2) {
-                        val pid = parts[0]
-                        val processName = parts[1]
-                        // Create ProcInfo with "pid processname" format
-                        runningProcs.add(ProcInfo("$pid $processName"))
+                if (trimmedLine.isNotEmpty() && !trimmedLine.startsWith("__EXIT_CODE__")) {
+                    try {
+                        // Split by whitespace, taking first part as PID and rest as process name
+                        val parts = trimmedLine.split(Regex("\\s+"), 2)
+                        if (parts.size >= 2) {
+                            val pid = parts[0]
+                            val processName = parts[1]
+                            
+                            // Validate PID is numeric
+                            if (pid.toLongOrNull() != null) {
+                                // Create ProcInfo with "pid processname" format
+                                runningProcs.add(ProcInfo("$pid $processName"))
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("ATG", "Failed to parse process line: $trimmedLine", e)
+                        // Continue with other lines
                     }
                 }
             }
+            
+            if (runningProcs.isEmpty()) {
+                android.util.Log.w("ATG", "No valid processes found with ps command")
+                return ListRunningProc() // Fallback to original method
+            }
+            
         } catch (e: Exception) {
             // If the new method fails, fall back to the original method
-            println("Failed to get full process names, falling back to original method: ${e.message}")
+            android.util.Log.w("ATG", "Failed to get full process names, falling back to original method: ${e.message}")
             return ListRunningProc()
         }
         return runningProcs
@@ -375,29 +617,45 @@ class ACE(context: Context) {
             val cmd = listOf("ps", "-eo", "pid,args", "-w", "-k", "-pid")
             val processInfoLines = Root.sudo(cmd)
             
-            // Skip the header line (first line contains "PID ARGS")
-            val dataLines = if (processInfoLines.isNotEmpty()) {
-                processInfoLines.drop(1)
-            } else {
-                emptyList()
+            if (processInfoLines.isEmpty()) {
+                android.util.Log.w("ATG", "No output from ps command")
+                return ListRunningProc() // Fallback to original method
             }
+            
+            // Skip the header line (first line contains "PID ARGS")
+            val dataLines = processInfoLines.drop(1)
             
             for (line in dataLines) {
                 val trimmedLine = line.trim()
-                if (trimmedLine.isNotEmpty()) {
-                    // Split by whitespace, taking first part as PID and rest as command line
-                    val parts = trimmedLine.split(Regex("\\s+"), 2)
-                    if (parts.size >= 2) {
-                        val pid = parts[0]
-                        val commandLine = parts[1]
-                        // Create ProcInfo with "pid commandline" format
-                        runningProcs.add(ProcInfo("$pid $commandLine"))
+                if (trimmedLine.isNotEmpty() && !trimmedLine.startsWith("__EXIT_CODE__")) {
+                    try {
+                        // Split by whitespace, taking first part as PID and rest as command line
+                        val parts = trimmedLine.split(Regex("\\s+"), 2)
+                        if (parts.size >= 2) {
+                            val pid = parts[0]
+                            val commandLine = parts[1]
+                            
+                            // Validate PID is numeric
+                            if (pid.toLongOrNull() != null) {
+                                // Create ProcInfo with "pid commandline" format
+                                runningProcs.add(ProcInfo("$pid $commandLine"))
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("ATG", "Failed to parse process line: $trimmedLine", e)
+                        // Continue with other lines
                     }
                 }
             }
+            
+            if (runningProcs.isEmpty()) {
+                android.util.Log.w("ATG", "No valid processes found with ps command")
+                return ListRunningProc() // Fallback to original method
+            }
+            
         } catch (e: Exception) {
             // If the new method fails, fall back to the original method
-            println("Failed to get process command lines, falling back to original method: ${e.message}")
+            android.util.Log.w("ATG", "Failed to get process command lines, falling back to original method: ${e.message}")
             return ListRunningProc()
         }
         return runningProcs

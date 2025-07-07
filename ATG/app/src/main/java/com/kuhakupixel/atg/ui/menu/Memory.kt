@@ -202,8 +202,15 @@ fun _MemoryMenu(
                 //
                 nextScanEnabled = isAttached && !isScanOnGoing.value,
                 nextScanClicked = fun() {
+                    val currentScanOption = getCurrentScanOption()
+                    
+                    // Warn user about intensive all_read_write operation
+                    if (currentScanOption.regionLevel == ACE.RegionLevel.all_read_write) {
+                        android.util.Log.w("ATG", "Starting all_read_write scan - this may take several minutes")
+                    }
+                    
                     onNextScanClicked(
-                        scanOptions = getCurrentScanOption(),
+                        scanOptions = currentScanOption,
                         ace = ace,
                         onBeforeScanStart = {
                             // disable next and new scan
@@ -211,17 +218,50 @@ fun _MemoryMenu(
                         },
                         onScanDone = {
                             isScanOnGoing.value = false
-                            // set initial scan to true
-                            initialScanDone.value = true
-                            // update matches table
-                            UpdateMatches(ace = ace)
+                            
+                            // Try to update matches - be tolerant for intensive operations
+                            try {
+                                if (ace.IsAttached()) {
+                                    // set initial scan to true
+                                    initialScanDone.value = true
+                                    // update matches table - this will handle its own error checking
+                                    UpdateMatches(ace = ace)
+                                    android.util.Log.d("ATG", "Scan completed successfully, matches updated")
+                                } else {
+                                    android.util.Log.w("ATG", "Scan completed but not attached, clearing matches")
+                                    currentMatchesList.value = emptyList()
+                                    matchesStatusText.value = "Not attached to any process"
+                                    initialScanDone.value = false
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("ATG", "Failed to update matches after scan completion: ${e.message}", e)
+                                // Don't clear matches immediately - let user try manual refresh
+                                matchesStatusText.value = "Scan completed - click refresh to update matches"
+                                initialScanDone.value = true
+                            }
                         },
                         onScanProgress = { progress: Float ->
                             scanProgress.value = progress
                         },
                         onScanError = { e: Exception ->
+                            android.util.Log.e("ATG", "Scan error occurred: ${e.message}", e)
                             showErrorDialog.value = true
-                            errorDialogMsg.value = e.stackTraceToString()
+                            
+                            // Provide user-friendly error messages based on the exception
+                            errorDialogMsg.value = when {
+                                e.message?.contains("Lost connection to the target process") == true -> 
+                                    "Connection to the target process was lost. The process may have crashed or been terminated.\n\nPlease reattach to the process to continue."
+                                e.message?.contains("ACE server is not responding") == true -> 
+                                    "The target process is not responding. It may be frozen or the connection was lost.\n\nPlease try reattaching to the process."
+                                e.message?.contains("Not attached to any process") == true -> 
+                                    "You are not attached to any process.\n\nPlease attach to a process first before scanning."
+                                e.message?.contains("Connection to the target process was lost") == true -> 
+                                    "Connection to the target process was lost.\n\nPlease reattach to the process."
+                                e.message?.contains("Failed to execute command") == true -> 
+                                    "Communication with the target process failed.\n\nThe process may have crashed. Please try reattaching."
+                                else -> 
+                                    "Scan failed: ${e.message ?: "Unknown error"}\n\nPlease check the connection to the target process and try again."
+                            }
                         }
 
 
@@ -231,9 +271,36 @@ fun _MemoryMenu(
                 //
                 newScanEnabled = isAttached && initialScanDone.value && !isScanOnGoing.value,
                 newScanClicked = {
-                    ace.ResetMatches()
-                    UpdateMatches(ace = ace)
-                    initialScanDone.value = false
+                    try {
+                        if (!ace.IsAttached()) {
+                            android.util.Log.w("ATG", "Cannot start new scan: not attached to any process")
+                            currentMatchesList.value = emptyList()
+                            matchesStatusText.value = "Not attached to any process"
+                        } else {
+                            // Reset matches and update display
+                            ace.ResetMatches()
+                            UpdateMatches(ace = ace)
+                            initialScanDone.value = false
+                            android.util.Log.d("ATG", "New scan started successfully")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("ATG", "Error starting new scan: ${e.message}", e)
+                        val errorMessage = when {
+                            e.message?.contains("Operation requires attaching") == true -> 
+                                "Not attached to any process"
+                            e.message?.contains("Failed to communicate with ACE server") == true -> 
+                                "Connection lost - please reattach"
+                            e.message?.contains("ACE server not responding") == true -> 
+                                "Server not responding - try reattaching"
+                            else -> 
+                                "Error starting new scan: ${e.message ?: "Unknown error"}"
+                        }
+                        matchesStatusText.value = errorMessage
+                        // Only clear matches if we're definitely not attached
+                        if (!ace.IsAttached()) {
+                            currentMatchesList.value = emptyList()
+                        }
+                    }
                 },
                 overlayContext = overlayContext!!,
             )
@@ -318,13 +385,59 @@ private fun MatchesTable(
 }
 
 private fun UpdateMatches(ace: ACE) {
-    val matchesCount: Int = ace.GetMatchCount()
-    val shownMatchesCount: Int = min(matchesCount, ATGSettings.maxShownMatchesCount)
-    // update ui
-    currentMatchesList.value = ace.ListMatches(ATGSettings.maxShownMatchesCount)
-    matchesStatusText.value = "$matchesCount matches (showing ${shownMatchesCount})"
-
-
+    try {
+        // Check if we're attached
+        if (!ace.IsAttached()) {
+            android.util.Log.w("ATG", "Cannot update matches: not attached to any process")
+            currentMatchesList.value = emptyList()
+            matchesStatusText.value = "Not attached to any process"
+            return
+        }
+        
+        android.util.Log.d("ATG", "Updating matches...")
+        
+        // Try to get match count - with retry for intensive operations
+        val matchesCount: Int = try {
+            ace.GetMatchCount()
+        } catch (e: Exception) {
+            android.util.Log.w("ATG", "First attempt to get match count failed, retrying: ${e.message}")
+            Thread.sleep(500) // Brief delay
+            ace.GetMatchCount() // Second attempt
+        }
+        
+        val shownMatchesCount: Int = min(matchesCount, ATGSettings.maxShownMatchesCount)
+        
+        // update ui
+        currentMatchesList.value = ace.ListMatches(ATGSettings.maxShownMatchesCount)
+        matchesStatusText.value = "$matchesCount matches (showing ${shownMatchesCount})"
+        
+        android.util.Log.d("ATG", "Successfully updated matches: $matchesCount total, showing $shownMatchesCount")
+        
+    } catch (e: Exception) {
+        android.util.Log.e("ATG", "Error updating matches: ${e.message}", e)
+        
+        // Provide more specific error messages but don't clear existing matches
+        val errorMessage = when {
+            e.message?.contains("Operation requires attaching") == true -> 
+                "Not attached to any process"
+            e.message?.contains("Failed to communicate with ACE server") == true -> 
+                "Connection lost - please reattach"
+            e.message?.contains("ACE server not responding") == true -> 
+                "Server busy - try refreshing or reattach"
+            e.message?.contains("timeout") == true -> 
+                "Server busy - try again in a moment"
+            e.message?.contains("Intensive memory scan") == true -> 
+                "Scan completed - server may be busy processing results"
+            else -> 
+                "Error getting matches: ${e.message ?: "Unknown error"}"
+        }
+        
+        // Only clear matches if we're definitely not attached
+        if (!ace.IsAttached()) {
+            currentMatchesList.value = emptyList()
+        }
+        matchesStatusText.value = errorMessage
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
