@@ -42,6 +42,7 @@ import android.os.Bundle;
  * RESULT_ERROR = 6 - Fatal error during the API action
  * RESULT_ITEM_ALREADY_OWNED = 7 - Failure to purchase since item is already owned
  * RESULT_ITEM_NOT_OWNED = 8 - Failure to consume since item is not owned
+ * RESULT_NETWORK_ERROR = 12 - Network error during the API action
  */
 interface IInAppBillingService {
     /**
@@ -279,14 +280,86 @@ interface IInAppBillingService {
     int isBillingSupportedExtraParams(int apiVersion, String packageName, String type,
         in Bundle extraParams)=9;
 
+    /**
+     * Get subscription management intent for the given subscription.
+     * @param apiVersion billing API version that the app is using, must be 9 or later
+     * @param packageName package name of the calling app
+     * @param sku the SKU of the subscription
+     * @param type of the subscription ("subs")
+     * @param extraParams a Bundle with extra params
+     * @return Bundle containing subscription management intent
+     */
     Bundle getSubscriptionManagementIntent(int apiVersion, String packageName, String sku, String type, in Bundle extraParams)=800;
 
+    /**
+     * Extended version of getPurchases method with extra parameters support.
+     * @param apiVersion billing API version that the app is using, must be 10 or later
+     * @param packageName package name of the calling app
+     * @param type of the in-app items being requested ("inapp" for one-time purchases and "subs" for subscriptions)
+     * @param continuationToken continuation token for pagination
+     * @param extraParams a Bundle with extra params
+     * @return Bundle containing purchase information
+     */
     Bundle getPurchasesExtraParams(int apiVersion, String packageName, String type, String continuationToken, in Bundle extraParams)=10;
 
+    /**
+     * Extended version of consumePurchase method with extra parameters support.
+     * @param apiVersion billing API version that the app is using, must be 11 or later
+     * @param packageName package name of the calling app
+     * @param purchaseToken purchase token to consume
+     * @param extraParams a Bundle with extra params
+     * @return Bundle containing consumption result
+     */
     Bundle consumePurchaseExtraParams(int apiVersion, String packageName, String purchaseToken, in Bundle extraParams)=11;
 
+    /**
+     * Extended version of getSkuDetails method with extra parameters support.
+     * @param apiVersion billing API version that the app is using, must be 12 or later
+     * @param packageName package name of the calling app
+     * @param type of the in-app items ("inapp" for one-time purchases and "subs" for subscriptions)
+     * @param skusBundle bundle containing SKUs to query
+     * @param extraParams a Bundle with extra params
+     * @return Bundle containing SKU details
+     */
     Bundle getSkuDetailsExtraParams(int apiVersion, String packageName, String type, in Bundle skusBundle, in Bundle extraParams)=900;
 
+    /**
+     * Acknowledge a purchase with extra parameters support.
+     * @param apiVersion billing API version that the app is using, must be 13 or later
+     * @param packageName package name of the calling app
+     * @param purchaseToken purchase token to acknowledge
+     * @param extraParam a Bundle with extra params
+     * @return Bundle containing acknowledgment result
+     */
     Bundle acknowledgePurchaseExtraParams(int apiVersion, String packageName, String purchaseToken, in Bundle extraParam)=901;
+
+    /**
+     * Check if feature is supported with extra parameters.
+     * @param apiVersion billing API version that the app is using, must be 14 or later
+     * @param packageName package name of the calling app
+     * @param feature feature to check
+     * @param extraParams a Bundle with extra params
+     * @return Bundle containing feature support information
+     */
+    Bundle isFeatureSupported(int apiVersion, String packageName, String feature, in Bundle extraParams)=902;
+
+    /**
+     * Get billing configuration for the app.
+     * @param apiVersion billing API version that the app is using, must be 15 or later
+     * @param packageName package name of the calling app
+     * @param extraParams a Bundle with extra params
+     * @return Bundle containing billing configuration
+     */
+    Bundle getBillingConfig(int apiVersion, String packageName, in Bundle extraParams)=903;
+
+    /**
+     * Query product details with enhanced support for new subscription model.
+     * @param apiVersion billing API version that the app is using, must be 16 or later
+     * @param packageName package name of the calling app
+     * @param productsBundle bundle containing product IDs to query
+     * @param extraParams a Bundle with extra params
+     * @return Bundle containing product details
+     */
+    Bundle queryProductDetails(int apiVersion, String packageName, in Bundle productsBundle, in Bundle extraParams)=904;
 
 }
