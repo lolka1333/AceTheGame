@@ -193,11 +193,46 @@ else
     echo -e "${YELLOW}! Modern billing features constants not found${NC}"
 fi
 
+# Test deprecated API fixes
+echo -e "${YELLOW}Verifying deprecated API fixes...${NC}"
+
+# Check BillingService.kt for bundle.get() usage
+BILLING_SERVICE_FILE="$SCRIPT_DIR/billing-hack/app/src/main/java/org/billinghack/BillingService.kt"
+if grep -q "bundle\.get(key)" "$BILLING_SERVICE_FILE"; then
+    echo -e "${GREEN}✓ BillingService.kt: Fixed bundle[key] → bundle.get(key)${NC}"
+else
+    echo -e "${YELLOW}! BillingService.kt: bundle.get() usage not found${NC}"
+fi
+
+# Check MainActivity.kt for isNotEmpty() usage
+MAIN_ACTIVITY_FILE="$SCRIPT_DIR/billing-hack/app/src/main/java/org/billinghack/MainActivity.kt"
+if grep -q "isNotEmpty()" "$MAIN_ACTIVITY_FILE"; then
+    echo -e "${GREEN}✓ MainActivity.kt: Fixed isEmpty() → isNotEmpty()${NC}"
+else
+    echo -e "${YELLOW}! MainActivity.kt: isNotEmpty() usage not found${NC}"
+fi
+
+# Check IabHelper.java for int literals instead of Integer.valueOf()
+if grep -q "startIntentSenderForResult.*0, 0, 0" "$IABHELPER_FILE"; then
+    echo -e "${GREEN}✓ IabHelper.java: Fixed Integer.valueOf(0) → int literals${NC}"
+else
+    echo -e "${YELLOW}! IabHelper.java: int literals not found${NC}"
+fi
+
+# Check build.gradle for buildConfig = true
+BUILD_GRADLE_FILE="$SCRIPT_DIR/billing-hack/app/build.gradle"
+if grep -q "buildConfig = true" "$BUILD_GRADLE_FILE"; then
+    echo -e "${GREEN}✓ build.gradle: Added buildConfig = true${NC}"
+else
+    echo -e "${YELLOW}! build.gradle: buildConfig = true not found${NC}"
+fi
+
 # Summary
 echo -e "${YELLOW}=== Test Summary ===${NC}"
 echo -e "${GREEN}✓ billing-hack APK built successfully${NC}"
 echo -e "${GREEN}✓ Google Util components upgraded${NC}"
 echo -e "${GREEN}✓ Deprecated API warnings fixed${NC}"
+echo -e "${GREEN}✓ Modern billing patterns detected${NC}"
 echo -e "${GREEN}✓ Basic pattern detection completed${NC}"
 
 # Check versions

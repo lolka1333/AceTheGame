@@ -51,7 +51,7 @@ class BillingService : Service() {
     fun logBundle(bundle: Bundle?) {
         Log.d(TAG, "printing bundle")
         for (key in bundle!!.keySet()) {
-            Log.d(TAG, key + " = \"" + bundle[key] + "\"")
+            Log.d(TAG, key + " = \"" + bundle.get(key) + "\"")
         }
     }
 
