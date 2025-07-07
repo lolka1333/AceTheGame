@@ -322,6 +322,87 @@ class ACE(context: Context) {
         return runningProcs
     }
 
+    /**
+     * Get running processes with full names using standard Linux ps command
+     * This bypasses the ACE util_client limitation that truncates process names
+     */
+    fun ListRunningProcFull(): List<ProcInfo> {
+        val runningProcs: MutableList<ProcInfo> = mutableListOf()
+        try {
+            // Use Toybox ps command (Android compatible)
+            // -e: all processes, -o: custom format, -w: wide output (don't truncate)
+            // -k: sort by field, -pid: sort by PID descending
+            val cmd = listOf("ps", "-eo", "pid,comm", "-w", "-k", "-pid")
+            val processInfoLines = Root.sudo(cmd)
+            
+            // Skip the header line (first line contains "PID COMM")
+            val dataLines = if (processInfoLines.isNotEmpty()) {
+                processInfoLines.drop(1)
+            } else {
+                emptyList()
+            }
+            
+            for (line in dataLines) {
+                val trimmedLine = line.trim()
+                if (trimmedLine.isNotEmpty()) {
+                    // Split by whitespace, taking first part as PID and rest as process name
+                    val parts = trimmedLine.split(Regex("\\s+"), 2)
+                    if (parts.size >= 2) {
+                        val pid = parts[0]
+                        val processName = parts[1]
+                        // Create ProcInfo with "pid processname" format
+                        runningProcs.add(ProcInfo("$pid $processName"))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // If the new method fails, fall back to the original method
+            println("Failed to get full process names, falling back to original method: ${e.message}")
+            return ListRunningProc()
+        }
+        return runningProcs
+    }
+
+    /**
+     * Get running processes with full command lines (including arguments)
+     */
+    fun ListRunningProcWithArgs(): List<ProcInfo> {
+        val runningProcs: MutableList<ProcInfo> = mutableListOf()
+        try {
+            // Use Toybox ps command with args to get full command lines
+            // -e: all processes, -o: custom format, -w: wide output (don't truncate)
+            // -k: sort by field, -pid: sort by PID descending
+            val cmd = listOf("ps", "-eo", "pid,args", "-w", "-k", "-pid")
+            val processInfoLines = Root.sudo(cmd)
+            
+            // Skip the header line (first line contains "PID ARGS")
+            val dataLines = if (processInfoLines.isNotEmpty()) {
+                processInfoLines.drop(1)
+            } else {
+                emptyList()
+            }
+            
+            for (line in dataLines) {
+                val trimmedLine = line.trim()
+                if (trimmedLine.isNotEmpty()) {
+                    // Split by whitespace, taking first part as PID and rest as command line
+                    val parts = trimmedLine.split(Regex("\\s+"), 2)
+                    if (parts.size >= 2) {
+                        val pid = parts[0]
+                        val commandLine = parts[1]
+                        // Create ProcInfo with "pid commandline" format
+                        runningProcs.add(ProcInfo("$pid $commandLine"))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // If the new method fails, fall back to the original method
+            println("Failed to get process command lines, falling back to original method: ${e.message}")
+            return ListRunningProc()
+        }
+        return runningProcs
+    }
+
     
     fun IsPidRunning(pid: Long): Boolean {
         val boolStr = UtilCmd(arrayOf("ps", "is_running", pid.toString()))

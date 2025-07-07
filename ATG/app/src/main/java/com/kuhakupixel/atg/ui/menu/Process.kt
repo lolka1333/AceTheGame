@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kuhakupixel.atg.R
@@ -35,6 +36,20 @@ import com.kuhakupixel.atg.ui.OverlayInputDialog
  * which process we are currently attached to?
  * */
 private var attachedStatusString: MutableState<String> = mutableStateOf("None")
+
+/**
+ * Process display modes
+ */
+enum class ProcessDisplayMode {
+    ORIGINAL,     // Using ACE util_client (may truncate names)
+    FULL_NAME,    // Full process names using ps -eo pid,comm  
+    FULL_COMMAND  // Full command lines using ps -eo pid,args
+}
+
+/**
+ * Current process display mode
+ */
+private var processDisplayMode: MutableState<ProcessDisplayMode> = mutableStateOf(ProcessDisplayMode.FULL_NAME)
 
 private fun AttachToProcess(
     ace: ACE?,
@@ -81,7 +96,7 @@ fun ProcessTable(
 
     CreateTable(modifier = Modifier.padding(16.dp),
         colNames = listOf("Pid", "Name"),
-        colWeights = listOf(0.3f, 0.7f),
+        colWeights = listOf(0.2f, 0.8f),
         itemCount = processList.size,
         minEmptyItemCount = 50,
         onRowClicked = { rowIndex: Int ->
@@ -96,7 +111,11 @@ fun ProcessTable(
                 Text(text = processList[rowIndex].GetPidStr())
             }
             if (colIndex == 1) {
-                Text(text = processList[rowIndex].GetName())
+                Text(
+                    text = processList[rowIndex].GetName(),
+                    maxLines = Int.MAX_VALUE,
+                    overflow = TextOverflow.Visible
+                )
             }
         })
 }
@@ -115,12 +134,41 @@ private fun _ProcessMenuContent(
 ) {
     if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT) {
         Text("Selected process: ${attachedStatusString.value}")
+        Text("Display mode: ${
+            when (processDisplayMode.value) {
+                ProcessDisplayMode.ORIGINAL -> "Original"
+                ProcessDisplayMode.FULL_NAME -> "Full Name"
+                ProcessDisplayMode.FULL_COMMAND -> "Full Command"
+            }
+        }")
     }
     buttonContainer {
 
         if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             Text("Selected process: ${attachedStatusString.value}")
         }
+        
+        Button(
+            onClick = { 
+                // Cycle through display modes
+                processDisplayMode.value = when (processDisplayMode.value) {
+                    ProcessDisplayMode.ORIGINAL -> ProcessDisplayMode.FULL_NAME
+                    ProcessDisplayMode.FULL_NAME -> ProcessDisplayMode.FULL_COMMAND
+                    ProcessDisplayMode.FULL_COMMAND -> ProcessDisplayMode.ORIGINAL
+                }
+                onRefreshClicked() // Refresh the list with new mode
+            },
+            modifier = Modifier.padding(start = 10.dp)
+        ) {
+            Text(
+                text = when (processDisplayMode.value) {
+                    ProcessDisplayMode.ORIGINAL -> "Mode: Original"
+                    ProcessDisplayMode.FULL_NAME -> "Mode: Full Name"
+                    ProcessDisplayMode.FULL_COMMAND -> "Mode: Full Command"
+                }
+            )
+        }
+        
         Button(onClick = onRefreshClicked, modifier = Modifier.padding(start = 10.dp)) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_refresh),
@@ -195,11 +243,14 @@ private fun _ProcessMenu(
 
 
 fun refreshProcList(ace: ACE?, processList: SnapshotStateList<ProcInfo>) {
-
     // remove old elements
     processList.clear()
-    // grab new one and add to the list
-    val runningProcs: List<ProcInfo>? = ace!!.ListRunningProc()
+    // grab new one and add to the list using the selected display mode
+    val runningProcs: List<ProcInfo>? = when (processDisplayMode.value) {
+        ProcessDisplayMode.ORIGINAL -> ace!!.ListRunningProc()
+        ProcessDisplayMode.FULL_NAME -> ace!!.ListRunningProcFull()
+        ProcessDisplayMode.FULL_COMMAND -> ace!!.ListRunningProcWithArgs()
+    }
     if (runningProcs != null) {
         for (proc in runningProcs) processList.add(proc)
     }
