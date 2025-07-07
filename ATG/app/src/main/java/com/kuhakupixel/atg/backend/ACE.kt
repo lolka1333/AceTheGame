@@ -107,7 +107,7 @@ class ACE(context: Context) {
     }
 
     fun IsAttached(): Boolean {
-        return aceAttachClient != null && IsServerResponsive()
+        return aceAttachClient != null
     }
 
     /**
@@ -122,9 +122,20 @@ class ACE(context: Context) {
     }
 
     private fun AssertNoAttachInARow() {
-        if (HasClient()) {
-            android.util.Log.w("ATG", "Client exists but may not be responsive, attempting to force detach first")
-            ForceDetach()
+        if (IsAttached()) {
+            android.util.Log.w("ATG", "Already attached, attempting to detach first")
+            try {
+                // Try normal detach first
+                if (IsServerResponsive()) {
+                    DeAttach()
+                } else {
+                    android.util.Log.w("ATG", "Server not responsive, using force detach")
+                    ForceDetach()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ATG", "Failed to detach, using force detach: ${e.message}")
+                ForceDetach()
+            }
         }
     }
 
@@ -134,25 +145,44 @@ class ACE(context: Context) {
     fun ForceDetach() {
         android.util.Log.i("ATG", "Force detaching from process")
         
-        if (aceAttachClient != null) {
-            try {
-                aceAttachClient!!.close()
-            } catch (e: Exception) {
-                android.util.Log.w("ATG", "Error closing attach client during force detach: ${e.message}")
+        try {
+            // Close attach client if exists
+            if (aceAttachClient != null) {
+                try {
+                    aceAttachClient!!.close()
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Error closing attach client during force detach: ${e.message}")
+                }
+                aceAttachClient = null
             }
+            
+            // Clear status publisher port
+            statusPublisherPort = null
+            
+            // Interrupt server thread if exists
+            if (serverThread != null) {
+                try {
+                    if (serverThread!!.isAlive) {
+                        serverThread!!.interrupt()
+                        // Give it a moment to clean up, but don't wait forever
+                        Thread.sleep(100)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Error interrupting server thread during force detach: ${e.message}")
+                } finally {
+                    serverThread = null
+                }
+            }
+            
+            android.util.Log.i("ATG", "Force detach completed successfully")
+            
+        } catch (e: Exception) {
+            android.util.Log.e("ATG", "Error during force detach: ${e.message}", e)
+            // Ensure cleanup even if something goes wrong
             aceAttachClient = null
-        }
-        
-        if (serverThread != null) {
-            try {
-                serverThread!!.interrupt()
-            } catch (e: Exception) {
-                android.util.Log.w("ATG", "Error interrupting server thread during force detach: ${e.message}")
-            }
             serverThread = null
+            statusPublisherPort = null
         }
-        
-        android.util.Log.i("ATG", "Force detach completed")
     }
 
     fun ConnectToACEServer(port: Int, publisherPort: Int) {
@@ -213,15 +243,49 @@ class ACE(context: Context) {
     
     fun DeAttach() {
         AssertAttached()
-        // tell server to die
-        aceAttachClient!!.Request(arrayOf("stop"))
-        aceAttachClient!!.close()
-        aceAttachClient = null
-        // only stop the server if we start one
-        if (serverThread != null) {
-            // wait for server's thread to finish
-            // to make sure we are not attached anymore
-            serverThread!!.join()
+        try {
+            android.util.Log.i("ATG", "Starting normal detach process")
+            
+            // tell server to die
+            if (aceAttachClient != null) {
+                try {
+                    aceAttachClient!!.Request(arrayOf("stop"))
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Failed to send stop command to server: ${e.message}")
+                }
+                
+                try {
+                    aceAttachClient!!.close()
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Failed to close attach client: ${e.message}")
+                }
+                aceAttachClient = null
+            }
+            
+            // Clear status publisher port
+            statusPublisherPort = null
+            
+            // only stop the server if we start one
+            if (serverThread != null) {
+                try {
+                    // wait for server's thread to finish with timeout
+                    serverThread!!.join(5000) // 5 seconds timeout
+                    if (serverThread!!.isAlive) {
+                        android.util.Log.w("ATG", "Server thread didn't finish in time, interrupting")
+                        serverThread!!.interrupt()
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Error waiting for server thread: ${e.message}")
+                } finally {
+                    serverThread = null
+                }
+            }
+            
+            android.util.Log.i("ATG", "Normal detach completed successfully")
+            
+        } catch (e: Exception) {
+            android.util.Log.e("ATG", "Error during detach, performing force detach: ${e.message}")
+            ForceDetach()
         }
     }
 
