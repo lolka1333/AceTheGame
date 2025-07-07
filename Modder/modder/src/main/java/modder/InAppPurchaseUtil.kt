@@ -197,9 +197,12 @@ class InAppPurchaseUtil {
             var newText = content
             
             // Additional patterns for newer billing libraries
+            // Note: We should NOT replace the AIDL interface class name because both our service 
+            // and Lucky Patcher's service implement the same IInAppBillingService interface
             val additionalPatterns = mapOf(
-                "\"com.android.vending\"" to if (redirectToLuckyPatcher) "\"com.android.vending.billing.InAppBillingService.BINN\"" else BILLING_HACK_PACKAGE_NAME,
-                "Lcom/android/vending/billing/IInAppBillingService" to if (redirectToLuckyPatcher) "Lcom/android/vending/billing/IInAppBillingService" else "Lorg/billinghack/BillingService",
+                // Only change package name when redirecting to our service
+                "\"com.android.vending\"" to if (redirectToLuckyPatcher) "\"com.android.vending\"" else "\"org.billinghack\"",
+                // Change service binding action appropriately
                 "com.android.vending.billing.IInAppBillingService.BIND" to if (redirectToLuckyPatcher) "com.android.vending.billing.InAppBillingService.BINN" else "org.billinghack.BillingService.BIND"
             )
             
