@@ -204,17 +204,105 @@ class ACE(context: Context) {
     // =============== this commands require attach ===================
     fun CheaterCmd(cmd: Array<String>): String {
         AssertAttached()
-        return aceAttachClient!!.Request(cmd)
+        
+        try {
+            // Check if server is alive before sending command
+            if (aceAttachClient is ACEAttachClient && !(aceAttachClient as ACEAttachClient).isServerAlive()) {
+                throw RuntimeException("ACE server connection is not alive")
+            }
+            
+            return aceAttachClient!!.Request(cmd)
+            
+        } catch (e: RuntimeException) {
+            android.util.Log.e("ATG", "Error in CheaterCmd: ${e.message}")
+            
+            // If it's a communication error, we might need to restart the connection
+            if (e.message?.contains("Failed to communicate with ACE server") == true || 
+                e.message?.contains("ACE server not responding") == true) {
+                
+                android.util.Log.w("ATG", "ACE server appears to be unresponsive, connection may need to be reset")
+                
+                // Mark client as disconnected to prevent further attempts
+                if (aceAttachClient is ACEAttachClient) {
+                    (aceAttachClient as ACEAttachClient).resetConnection()
+                }
+            }
+            
+            throw RuntimeException("Failed to execute command on ACE server: ${cmd.joinToString(" ")}", e)
+        }
     }
 
     fun CheaterCmdAsList(cmd: Array<String>): List<String> {
         AssertAttached()
-        return aceAttachClient!!.RequestAsList(cmd)
+        
+        try {
+            // Check if server is alive before sending command
+            if (aceAttachClient is ACEAttachClient && !(aceAttachClient as ACEAttachClient).isServerAlive()) {
+                throw RuntimeException("ACE server connection is not alive")
+            }
+            
+            return aceAttachClient!!.RequestAsList(cmd)
+            
+        } catch (e: RuntimeException) {
+            android.util.Log.e("ATG", "Error in CheaterCmdAsList: ${e.message}")
+            
+            // If it's a communication error, we might need to restart the connection
+            if (e.message?.contains("Failed to communicate with ACE server") == true || 
+                e.message?.contains("ACE server not responding") == true) {
+                
+                android.util.Log.w("ATG", "ACE server appears to be unresponsive, connection may need to be reset")
+                
+                // Mark client as disconnected to prevent further attempts
+                if (aceAttachClient is ACEAttachClient) {
+                    (aceAttachClient as ACEAttachClient).resetConnection()
+                }
+            }
+            
+            throw RuntimeException("Failed to execute command on ACE server: ${cmd.joinToString(" ")}", e)
+        }
     }
 
     fun GetAttachedPid(): Long {
         val pidStr = CheaterCmd(arrayOf("pid"))
         return pidStr.toLong()
+    }
+    
+    /**
+     * Check if the ACE server is responsive
+     */
+    fun IsServerResponsive(): Boolean {
+        if (!IsAttached()) {
+            return false
+        }
+        
+        try {
+            GetAttachedPid()
+            return true
+        } catch (e: Exception) {
+            android.util.Log.w("ATG", "ACE server responsiveness check failed: ${e.message}")
+            return false
+        }
+    }
+    
+    /**
+     * Get server status information for debugging
+     */
+    fun GetServerStatus(): String {
+        return if (!IsAttached()) {
+            "Not attached to any process"
+        } else {
+            try {
+                val pid = GetAttachedPid()
+                val alive = if (aceAttachClient is ACEAttachClient) {
+                    (aceAttachClient as ACEAttachClient).isServerAlive()
+                } else {
+                    "Unknown"
+                }
+                "Attached to PID: $pid, Connection alive: $alive"
+            } catch (e: Exception) {
+                "Attached but server not responding: ${e.message}"
+            }
+        }
     }
 
     
