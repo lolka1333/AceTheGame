@@ -32,17 +32,26 @@ fun onNextScanClicked(
 ) {
     onBeforeScanStart()
     
-    // Check if we're still attached and server is responsive
-    if (!ace.IsAttached()) {
+    // Check if we have a client connection (don't check responsiveness for initial check as server might be busy)
+    if (!ace.HasClient()) {
         onScanError(Exception("Not attached to any process. Please attach to a process first."))
         onScanDone()
         return
     }
     
-    if (!ace.IsServerResponsive()) {
+    // For intensive operations like all_read_write, the server might be temporarily unresponsive
+    // so we'll skip the initial responsiveness check and let the actual scan operation determine connectivity
+    val isIntensiveOperation = scanOptions.regionLevel == ACE.RegionLevel.all_read_write || 
+                               scanOptions.regionLevel == ACE.RegionLevel.all
+                               
+    if (!isIntensiveOperation && !ace.IsServerResponsive()) {
         onScanError(Exception("ACE server is not responding. The target process may have crashed or the connection was lost. Please try reattaching to the process."))
         onScanDone()
         return
+    }
+    
+    if (isIntensiveOperation) {
+        Log.i("ATG", "Starting intensive memory operation (${scanOptions.regionLevel}), skipping initial responsiveness check")
     }
     
     val statusPublisherPort = ace.getStatusPublisherPort()

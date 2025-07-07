@@ -107,6 +107,13 @@ class ACE(context: Context) {
     }
 
     fun IsAttached(): Boolean {
+        return aceAttachClient != null && IsServerResponsive()
+    }
+
+    /**
+     * Check if client exists (regardless of server responsiveness)
+     */
+    fun HasClient(): Boolean {
         return aceAttachClient != null
     }
 
@@ -115,7 +122,37 @@ class ACE(context: Context) {
     }
 
     private fun AssertNoAttachInARow() {
-        if (IsAttached()) throw AttachingInARowException("Cannot Attach without DeAttaching first")
+        if (HasClient()) {
+            android.util.Log.w("ATG", "Client exists but may not be responsive, attempting to force detach first")
+            ForceDetach()
+        }
+    }
+
+    /**
+     * Force detach without server communication - use when server is unresponsive
+     */
+    fun ForceDetach() {
+        android.util.Log.i("ATG", "Force detaching from process")
+        
+        if (aceAttachClient != null) {
+            try {
+                aceAttachClient!!.close()
+            } catch (e: Exception) {
+                android.util.Log.w("ATG", "Error closing attach client during force detach: ${e.message}")
+            }
+            aceAttachClient = null
+        }
+        
+        if (serverThread != null) {
+            try {
+                serverThread!!.interrupt()
+            } catch (e: Exception) {
+                android.util.Log.w("ATG", "Error interrupting server thread during force detach: ${e.message}")
+            }
+            serverThread = null
+        }
+        
+        android.util.Log.i("ATG", "Force detach completed")
     }
 
     fun ConnectToACEServer(port: Int, publisherPort: Int) {
@@ -271,13 +308,14 @@ class ACE(context: Context) {
      * Check if the ACE server is responsive
      */
     fun IsServerResponsive(): Boolean {
-        if (!IsAttached()) {
+        if (aceAttachClient == null) {
             return false
         }
         
         try {
-            GetAttachedPid()
-            return true
+            // Quick responsiveness check - try to get PID
+            val pidStr = aceAttachClient!!.Request(arrayOf("pid"))
+            return pidStr.isNotEmpty() && pidStr.toLongOrNull() != null
         } catch (e: Exception) {
             android.util.Log.w("ATG", "ACE server responsiveness check failed: ${e.message}")
             return false

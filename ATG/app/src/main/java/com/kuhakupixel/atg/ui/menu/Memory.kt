@@ -120,7 +120,7 @@ fun _MemoryMenu(
 
         defaultValueInitialized = true
     }
-    val isAttached: Boolean = ace.IsAttached()
+    val isAttached: Boolean = ace.HasClient()
     valueTypeEnabled.value = isAttached && !initialScanDone.value
     regionLevelEnabled.value = isAttached && !initialScanDone.value
     scanTypeEnabled.value = isAttached
@@ -219,17 +219,23 @@ fun _MemoryMenu(
                         onScanDone = {
                             isScanOnGoing.value = false
                             
-                            // Only update matches if we're still connected
-                            if (ace.IsAttached() && ace.IsServerResponsive()) {
-                                // set initial scan to true
-                                initialScanDone.value = true
-                                // update matches table
-                                UpdateMatches(ace = ace)
-                                android.util.Log.d("ATG", "Scan completed successfully, matches updated")
-                            } else {
-                                android.util.Log.w("ATG", "Scan completed but server connection lost, skipping match update")
+                            // Try to update matches - the server might be temporarily unresponsive after intensive operations
+                            try {
+                                if (ace.HasClient()) {
+                                    // set initial scan to true
+                                    initialScanDone.value = true
+                                    // update matches table
+                                    UpdateMatches(ace = ace)
+                                    android.util.Log.d("ATG", "Scan completed successfully, matches updated")
+                                } else {
+                                    android.util.Log.w("ATG", "Scan completed but no client connection, clearing matches")
+                                    currentMatchesList.value = emptyList()
+                                    matchesStatusText.value = "Not attached to any process"
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("ATG", "Failed to update matches after scan completion: ${e.message}", e)
                                 currentMatchesList.value = emptyList()
-                                matchesStatusText.value = "Connection lost during scan"
+                                matchesStatusText.value = "Error updating matches: ${e.message ?: "Unknown error"}"
                             }
                         },
                         onScanProgress = { progress: Float ->
@@ -264,15 +270,12 @@ fun _MemoryMenu(
                 newScanEnabled = isAttached && initialScanDone.value && !isScanOnGoing.value,
                 newScanClicked = {
                     try {
-                        if (!ace.IsAttached()) {
+                        if (!ace.HasClient()) {
                             android.util.Log.w("ATG", "Cannot start new scan: not attached to any process")
                             currentMatchesList.value = emptyList()
                             matchesStatusText.value = "Not attached to any process"
-                        } else if (!ace.IsServerResponsive()) {
-                            android.util.Log.w("ATG", "Cannot start new scan: ACE server is not responsive")
-                            currentMatchesList.value = emptyList()
-                            matchesStatusText.value = "Server not responding"
                         } else {
+                            // Try to reset matches - this will test if server is responsive
                             ace.ResetMatches()
                             UpdateMatches(ace = ace)
                             initialScanDone.value = false
@@ -281,7 +284,15 @@ fun _MemoryMenu(
                     } catch (e: Exception) {
                         android.util.Log.e("ATG", "Error starting new scan: ${e.message}", e)
                         currentMatchesList.value = emptyList()
-                        matchesStatusText.value = "Error starting new scan: ${e.message ?: "Unknown error"}"
+                        val errorMessage = when {
+                            e.message?.contains("Failed to communicate with ACE server") == true -> 
+                                "Server not responding - please reattach"
+                            e.message?.contains("ACE server not responding") == true -> 
+                                "Server not responding - try again or reattach"
+                            else -> 
+                                "Error starting new scan: ${e.message ?: "Unknown error"}"
+                        }
+                        matchesStatusText.value = errorMessage
                     }
                 },
                 overlayContext = overlayContext!!,
@@ -368,21 +379,15 @@ private fun MatchesTable(
 
 private fun UpdateMatches(ace: ACE) {
     try {
-        // Check if we're still attached and server is responsive
-        if (!ace.IsAttached()) {
+        // Check if we have a client connection
+        if (!ace.HasClient()) {
             android.util.Log.w("ATG", "Cannot update matches: not attached to any process")
             currentMatchesList.value = emptyList()
             matchesStatusText.value = "Not attached to any process"
             return
         }
         
-        if (!ace.IsServerResponsive()) {
-            android.util.Log.w("ATG", "Cannot update matches: ACE server is not responsive")
-            currentMatchesList.value = emptyList()
-            matchesStatusText.value = "Server not responding"
-            return
-        }
-        
+        // Try to get match count - this will fail if server is really unresponsive
         val matchesCount: Int = ace.GetMatchCount()
         val shownMatchesCount: Int = min(matchesCount, ATGSettings.maxShownMatchesCount)
         
@@ -394,8 +399,21 @@ private fun UpdateMatches(ace: ACE) {
         
     } catch (e: Exception) {
         android.util.Log.e("ATG", "Error updating matches: ${e.message}", e)
+        
+        // Provide more specific error messages
+        val errorMessage = when {
+            e.message?.contains("Failed to communicate with ACE server") == true -> 
+                "Connection lost - please reattach"
+            e.message?.contains("ACE server not responding") == true -> 
+                "Server not responding - try again or reattach"
+            e.message?.contains("timeout") == true -> 
+                "Operation timed out - server may be busy"
+            else -> 
+                "Error getting matches: ${e.message ?: "Unknown error"}"
+        }
+        
         currentMatchesList.value = emptyList()
-        matchesStatusText.value = "Error getting matches: ${e.message ?: "Unknown error"}"
+        matchesStatusText.value = errorMessage
     }
 }
 

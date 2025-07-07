@@ -83,13 +83,23 @@ private suspend fun AttachToProcess(
             }
             
             // DeAttach first if we have been attached previously
-            if (ace.IsAttached()) {
+            if (ace.HasClient()) {
                 try {
                     android.util.Log.d("ATG", "Detaching from previous process")
-                    ace.DeAttach()
+                    if (ace.IsServerResponsive()) {
+                        ace.DeAttach()
+                    } else {
+                        android.util.Log.w("ATG", "Server not responsive, using force detach")
+                        ace.ForceDetach()
+                    }
                 } catch (e: Exception) {
                     android.util.Log.w("ATG", "Failed to detach from previous process: ${e.message}")
-                    // Continue anyway, try to attach to new process
+                    // Force detach if normal detach fails
+                    try {
+                        ace.ForceDetach()
+                    } catch (e2: Exception) {
+                        android.util.Log.e("ATG", "Force detach also failed: ${e2.message}")
+                    }
                 }
             }
             
