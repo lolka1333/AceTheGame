@@ -14,7 +14,7 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent("org.billinghack.BillingService.BIND")
         intent.setPackage("org.billinghack")
         val queryIntentServices = this.packageManager.queryIntentServices(intent, 0)
-        if (queryIntentServices != null && !queryIntentServices.isEmpty()) {
+        if (queryIntentServices != null && queryIntentServices.isNotEmpty()) {
             val resolveInfo = queryIntentServices[0]
             if (resolveInfo.serviceInfo != null) {
                 val str = resolveInfo.serviceInfo.packageName

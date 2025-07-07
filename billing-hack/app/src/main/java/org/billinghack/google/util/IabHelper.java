@@ -111,12 +111,14 @@ public class IabHelper {
     // Billing response codes
     public static final int BILLING_RESPONSE_RESULT_OK = 0;
     public static final int BILLING_RESPONSE_RESULT_USER_CANCELED = 1;
+    public static final int BILLING_RESPONSE_RESULT_SERVICE_UNAVAILABLE = 2;
     public static final int BILLING_RESPONSE_RESULT_BILLING_UNAVAILABLE = 3;
     public static final int BILLING_RESPONSE_RESULT_ITEM_UNAVAILABLE = 4;
     public static final int BILLING_RESPONSE_RESULT_DEVELOPER_ERROR = 5;
     public static final int BILLING_RESPONSE_RESULT_ERROR = 6;
     public static final int BILLING_RESPONSE_RESULT_ITEM_ALREADY_OWNED = 7;
     public static final int BILLING_RESPONSE_RESULT_ITEM_NOT_OWNED = 8;
+    public static final int BILLING_RESPONSE_RESULT_NETWORK_ERROR = 12;
 
     // IAB Helper error codes
     public static final int IABHELPER_ERROR_BASE = -1000;
@@ -130,6 +132,7 @@ public class IabHelper {
     public static final int IABHELPER_UNKNOWN_ERROR = -1008;
     public static final int IABHELPER_SUBSCRIPTIONS_NOT_AVAILABLE = -1009;
     public static final int IABHELPER_INVALID_CONSUMPTION = -1010;
+    public static final int IABHELPER_FEATURE_NOT_SUPPORTED = -1011;
 
     // Keys for the responses from InAppBillingService
     public static final String RESPONSE_CODE = "RESPONSE_CODE";
@@ -149,6 +152,23 @@ public class IabHelper {
     // some fields on the getSkuDetails response bundle
     public static final String GET_SKU_DETAILS_ITEM_LIST = "ITEM_ID_LIST";
     public static final String GET_SKU_DETAILS_ITEM_TYPE_LIST = "ITEM_TYPE_LIST";
+
+    // Additional constants for modern billing library support
+    public static final String PRODUCT_TYPE_INAPP = "inapp";
+    public static final String PRODUCT_TYPE_SUBS = "subs";
+    
+    // Feature support constants
+    public static final String FEATURE_SUBSCRIPTIONS = "subscriptions";
+    public static final String FEATURE_SUBSCRIPTIONS_UPDATE = "subscriptionsUpdate";
+    public static final String FEATURE_IN_APP_ITEMS_ON_VR = "inAppItemsOnVr";
+    public static final String FEATURE_SUBSCRIPTIONS_ON_VR = "subscriptionsOnVr";
+    public static final String FEATURE_PRICE_CHANGE_CONFIRMATION = "priceChangeConfirmation";
+    public static final String FEATURE_BILLING_CONFIG = "billingConfig";
+    
+    // Additional response keys for new billing model
+    public static final String RESPONSE_PRODUCT_DETAILS_LIST = "DETAILS_LIST";
+    public static final String RESPONSE_SUBSCRIPTION_OFFER_DETAILS = "subscriptionOfferDetails";
+    public static final String RESPONSE_ONE_TIME_PURCHASE_OFFER_DETAILS = "oneTimePurchaseOfferDetails";
 
     /**
      * Creates an instance. After creation, it will not yet be ready to use. You must perform
@@ -400,8 +420,7 @@ public class IabHelper {
             mPurchasingItemType = itemType;
             act.startIntentSenderForResult(pendingIntent.getIntentSender(),
                                            requestCode, new Intent(),
-                                           Integer.valueOf(0), Integer.valueOf(0),
-                                           Integer.valueOf(0));
+                                           0, 0, 0);
         }
         catch (SendIntentException e) {
             logError("SendIntentException while launching purchase flow for sku " + sku);
@@ -748,10 +767,11 @@ public class IabHelper {
      *     It also includes the result code numerically.
      */
     public static String getResponseDesc(int code) {
-        String[] iab_msgs = ("0:OK/1:User Canceled/2:Unknown/" +
+        String[] iab_msgs = ("0:OK/1:User Canceled/2:Service Unavailable/" +
                 "3:Billing Unavailable/4:Item unavailable/" +
                 "5:Developer Error/6:Error/7:Item Already Owned/" +
-                "8:Item not owned").split("/");
+                "8:Item not owned/9:Unknown/10:Unknown/11:Unknown/" +
+                "12:Network Error").split("/");
         String[] iabhelper_msgs = ("0:OK/-1001:Remote exception during initialization/" +
                                    "-1002:Bad response received/" +
                                    "-1003:Purchase signature verification failed/" +
@@ -761,7 +781,8 @@ public class IabHelper {
                                    "-1007:Missing token/" +
                                    "-1008:Unknown error/" +
                                    "-1009:Subscriptions not available/" +
-                                   "-1010:Invalid consumption attempt").split("/");
+                                   "-1010:Invalid consumption attempt/" +
+                                   "-1011:Feature not supported").split("/");
 
         if (code <= IABHELPER_ERROR_BASE) {
             int index = IABHELPER_ERROR_BASE - code;
@@ -801,7 +822,13 @@ public class IabHelper {
 
     // Workaround to bug where sometimes response codes come as Long instead of Integer
     int getResponseCodeFromIntent(Intent i) {
-        Object o = i.getExtras().get(RESPONSE_CODE);
+        Bundle extras = i.getExtras();
+        if (extras == null) {
+            logError("Intent with no extras, assuming OK (known issue)");
+            return BILLING_RESPONSE_RESULT_OK;
+        }
+        
+        Object o = extras.get(RESPONSE_CODE);
         if (o == null) {
             logError("Intent with no response code, assuming OK (known issue)");
             return BILLING_RESPONSE_RESULT_OK;

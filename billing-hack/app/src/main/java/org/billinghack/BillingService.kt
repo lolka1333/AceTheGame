@@ -30,6 +30,18 @@ class BillingService : Service() {
         const val TAG = "BillingHack"
         const val MODIFIED_PRICE = 5.00
         const val MODIFIED_PRICE_MICRO = MODIFIED_PRICE * 10000000
+
+        // New response codes from latest billing library
+        const val BILLING_RESPONSE_RESULT_OK = 0
+        const val BILLING_RESPONSE_RESULT_USER_CANCELED = 1
+        const val BILLING_RESPONSE_RESULT_SERVICE_UNAVAILABLE = 2
+        const val BILLING_RESPONSE_RESULT_BILLING_UNAVAILABLE = 3
+        const val BILLING_RESPONSE_RESULT_ITEM_UNAVAILABLE = 4
+        const val BILLING_RESPONSE_RESULT_DEVELOPER_ERROR = 5
+        const val BILLING_RESPONSE_RESULT_ERROR = 6
+        const val BILLING_RESPONSE_RESULT_ITEM_ALREADY_OWNED = 7
+        const val BILLING_RESPONSE_RESULT_ITEM_NOT_OWNED = 8
+        const val BILLING_RESPONSE_RESULT_NETWORK_ERROR = 12
     }
 
     init {
@@ -39,7 +51,7 @@ class BillingService : Service() {
     fun logBundle(bundle: Bundle?) {
         Log.d(TAG, "printing bundle")
         for (key in bundle!!.keySet()) {
-            Log.d(TAG, key + " = \"" + bundle[key] + "\"")
+            Log.d(TAG, key + " = \"" + bundle.get(key) + "\"")
         }
     }
 
@@ -102,7 +114,6 @@ class BillingService : Service() {
                 println(i)
                 val item = items[i]
 
-
                 val productDetailDummy = ProductDetail(
                     productId = item,
                     type = type!!,
@@ -144,38 +155,7 @@ class BillingService : Service() {
             intent.putExtra(BuyActivity.EXTRA_PACKAGENAME, packageName)
             intent.putExtra(BuyActivity.EXTRA_PRODUCT_ID, sku)
             intent.putExtra(BuyActivity.EXTRA_DEV_PAYLOAD, developerPayload)
-            // need flag mutable because
-            /**
-             * 11-27 22:00:58.836 27995 28717 W BillingClient: Bundle returned from getPurchase() doesn't contain required fields.
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: Exception while launching billing flow. Try to reconnect
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: java.util.concurrent.ExecutionException: java.lang.IllegalArgumentException: org.billinghack: Targeting S+ (version 31 and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be specified when creating a PendingIntent.
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: Strongly consider using FLAG_IMMUTABLE, only use FLAG_MUTABLE if some functionality depends on the PendingIntent being mutable, e.g. if it needs to be used with inline replies or bubbles.
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at java.util.concurrent.FutureTask.report(FutureTask.java:122)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at java.util.concurrent.FutureTask.get(FutureTask.java:205)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at com.android.billingclient.api.BillingClientImpl.launchBillingFlow(com.android.billingclient:billing@@6.0.1:132)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at com.fingersoft.billing.NewBillingHandle.StartPurchase(NewBillingHandle.java:363)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at com.fingersoft.game.MainActivity.requestInAppPurchaseGooglePlayNew(MainActivity.java:1499)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at org.cocos2dx.lib.Cocos2dxRenderer.nativeTouchesEnd(Native Method)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at org.cocos2dx.lib.Cocos2dxRenderer.handleActionUp(Cocos2dxRenderer.java:95)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at org.cocos2dx.lib.Cocos2dxGLSurfaceView$10.run(Cocos2dxGLSurfaceView.java:381)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at com.fingersoft.game.FSGLSurfaceView$GLThread.guardedRun(FSGLSurfaceView.java:1463)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at com.fingersoft.game.FSGLSurfaceView$GLThread.run(FSGLSurfaceView.java:1250)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: Caused by: java.lang.IllegalArgumentException: org.billinghack: Targeting S+ (version 31 and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be specified when creating a PendingIntent.
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: Strongly consider using FLAG_IMMUTABLE, only use FLAG_MUTABLE if some functionality depends on the PendingIntent being mutable, e.g. if it needs to be used with inline replies or bubbles.
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at android.os.Parcel.createExceptionOrNull(Parcel.java:3029)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at android.os.Parcel.createException(Parcel.java:3009)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at android.os.Parcel.readException(Parcel.java:2992)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at android.os.Parcel.readException(Parcel.java:2934)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at com.google.android.gms.internal.play_billing.zzh.zzo(com.android.billingclient:billing@@6.0.1:3)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at com.google.android.gms.internal.play_billing.zzc.zzg(com.android.billingclient:billing@@6.0.1:8)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at com.android.billingclient.api.BillingClientImpl.zzc(com.android.billingclient:billing@@6.0.1:2)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at com.android.billingclient.api.zzs.call(Unknown Source:12)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at java.util.concurrent.FutureTask.run(FutureTask.java:264)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1137)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:637)
-             * 11-27 22:01:03.781 27995 28111 W BillingClient: 	at java.lang.Thread.run(Thread.java:1012)
-             *
-             * */
+            // need flag mutable because of targeting S+ requirements
             pendingIntent = PendingIntent.getActivity(
                 applicationContext, 0, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
@@ -183,7 +163,6 @@ class BillingService : Service() {
             bundle.putParcelable(IabHelper.RESPONSE_BUY_INTENT, pendingIntent)
             return bundle
         }
-
 
         @Synchronized
         @Throws(RemoteException::class)
@@ -200,8 +179,7 @@ class BillingService : Service() {
             bundle.putInt(IabHelper.RESPONSE_CODE, IabHelper.BILLING_RESPONSE_RESULT_OK)
 
             if (!billingStorage!!.packageNameToPackagePurchaseDataMap.containsKey(packageName)) {
-                return Bundle()
-
+                return bundle
             }
             // get previous purchases data
             val packagePurchaseData: PackagePurchaseData =
@@ -218,7 +196,6 @@ class BillingService : Service() {
                 IabHelper.RESPONSE_INAPP_ITEM_LIST,
                 packagePurchaseData.inappPurchaseItemList,
             )
-
 
             bundle.putStringArrayList(
                 IabHelper.RESPONSE_INAPP_PURCHASE_DATA_LIST,
@@ -261,7 +238,7 @@ class BillingService : Service() {
             developerPayload: String?
         ): Bundle {
             Log.d(TAG, "getBuyIntentToReplaceSkus")
-            return Bundle()
+            return getBuyIntent(apiVersion, packageName, newSku, type, developerPayload)
         }
 
         @Synchronized
@@ -288,7 +265,8 @@ class BillingService : Service() {
             extraParams: Bundle?
         ): Bundle {
             Log.d(TAG, "getPurchaseHistory")
-            return Bundle()
+            // Return purchases as history - this method is deprecated but still supported
+            return getPurchases(apiVersion, packageName, type, continuationToken)
         }
 
         @Synchronized
@@ -300,7 +278,7 @@ class BillingService : Service() {
             extraParams: Bundle?
         ): Int {
             Log.d(TAG, "isBillingSupportedExtraParams")
-            return 0
+            return BILLING_RESPONSE_RESULT_OK
         }
 
         @Synchronized
@@ -314,7 +292,10 @@ class BillingService : Service() {
         ): Bundle {
             Log.d(TAG, "getSubscriptionManagementIntent  $packageName $sku $type")
             logBundle(extraParams)
-            return Bundle()
+            val bundle = Bundle()
+            bundle.putInt(IabHelper.RESPONSE_CODE, BILLING_RESPONSE_RESULT_OK)
+            // Return empty intent for subscription management
+            return bundle
         }
 
         @Synchronized
@@ -376,8 +357,149 @@ class BillingService : Service() {
             extraParam: Bundle?
         ): Bundle {
             Log.d(TAG, "acknowledgePurchaseExtraParams")
-            return Bundle()
+            val bundle = Bundle()
+            bundle.putInt(IabHelper.RESPONSE_CODE, BILLING_RESPONSE_RESULT_OK)
+            return bundle
+        }
+
+        @Synchronized
+        @Throws(RemoteException::class)
+        override fun isFeatureSupported(
+            apiVersion: Int,
+            packageName: String,
+            feature: String?,
+            extraParams: Bundle?
+        ): Bundle {
+            Log.d(TAG, "isFeatureSupported: $feature")
+            val bundle = Bundle()
+            bundle.putInt(IabHelper.RESPONSE_CODE, BILLING_RESPONSE_RESULT_OK)
+            
+            // Support common features that apps might check for
+            when (feature) {
+                "subscriptions" -> bundle.putBoolean("SUPPORTED", true)
+                "subscriptionsUpdate" -> bundle.putBoolean("SUPPORTED", true)
+                "inAppItemsOnVr" -> bundle.putBoolean("SUPPORTED", false)
+                "subscriptionsOnVr" -> bundle.putBoolean("SUPPORTED", false)
+                "priceChangeConfirmation" -> bundle.putBoolean("SUPPORTED", true)
+                "playBillingNewSubscriptionModel" -> bundle.putBoolean("SUPPORTED", true)
+                else -> bundle.putBoolean("SUPPORTED", false)
+            }
+            return bundle
+        }
+
+        @Synchronized
+        @Throws(RemoteException::class)
+        override fun getBillingConfig(
+            apiVersion: Int,
+            packageName: String,
+            extraParams: Bundle?
+        ): Bundle {
+            Log.d(TAG, "getBillingConfig")
+            val bundle = Bundle()
+            bundle.putInt(IabHelper.RESPONSE_CODE, BILLING_RESPONSE_RESULT_OK)
+            
+            // Return billing configuration
+            bundle.putString("COUNTRY_CODE", "US")
+            bundle.putString("BILLING_COUNTRY", "US")
+            return bundle
+        }
+
+        @Synchronized
+        @Throws(RemoteException::class)
+        override fun queryProductDetails(
+            apiVersion: Int,
+            packageName: String,
+            productsBundle: Bundle?,
+            extraParams: Bundle?
+        ): Bundle {
+            Log.d(TAG, "queryProductDetails - new subscription model support")
+            Log.d(TAG, "apiVersion: $apiVersion")
+            Log.d(TAG, "packageName: $packageName")
+            
+            val bundle = Bundle()
+            bundle.putInt(IabHelper.RESPONSE_CODE, BILLING_RESPONSE_RESULT_OK)
+            
+            val productDetailsList = ArrayList<String>()
+            val productList = productsBundle?.getStringArrayList("ITEM_ID_LIST")
+            val productTypeList = productsBundle?.getStringArrayList("ITEM_TYPE_LIST")
+            
+            if (productList != null && productTypeList != null) {
+                for (i in 0 until minOf(productList.size, productTypeList.size)) {
+                    val productId = productList[i]
+                    val productType = productTypeList[i]
+                    
+                    // Create enhanced product details with new subscription model support
+                    val productDetails = createEnhancedProductDetails(productId, productType)
+                    productDetailsList.add(productDetails)
+                }
+            }
+            
+            bundle.putStringArrayList("DETAILS_LIST", productDetailsList)
+            return bundle
+        }
+
+        private fun createEnhancedProductDetails(productId: String, productType: String): String {
+            return when (productType) {
+                "subs" -> {
+                    // Enhanced subscription details with base plans and offers
+                    """
+                    {
+                        "productId": "$productId",
+                        "type": "subs",
+                        "title": "$productId Premium Subscription",
+                        "description": "Premium features and content",
+                        "subscriptionOfferDetails": [
+                            {
+                                "basePlanId": "monthly-base",
+                                "offerId": null,
+                                "offerToken": "monthly_offer_token_$productId",
+                                "pricingPhases": [
+                                    {
+                                        "priceAmountMicros": ${MODIFIED_PRICE_MICRO.toLong()},
+                                        "priceCurrencyCode": "USD",
+                                        "formattedPrice": "$${MODIFIED_PRICE}",
+                                        "billingPeriod": "P1M",
+                                        "recurrenceMode": 1,
+                                        "billingCycleCount": 0
+                                    }
+                                ]
+                            },
+                            {
+                                "basePlanId": "yearly-base",
+                                "offerId": "yearly-discount",
+                                "offerToken": "yearly_offer_token_$productId",
+                                "pricingPhases": [
+                                    {
+                                        "priceAmountMicros": ${(MODIFIED_PRICE_MICRO * 10).toLong()},
+                                        "priceCurrencyCode": "USD", 
+                                        "formattedPrice": "$${MODIFIED_PRICE * 10}",
+                                        "billingPeriod": "P1Y",
+                                        "recurrenceMode": 1,
+                                        "billingCycleCount": 0
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                    """.trimIndent()
+                }
+                else -> {
+                    // One-time product details
+                    """
+                    {
+                        "productId": "$productId",
+                        "type": "inapp",
+                        "title": "$productId Premium",
+                        "description": "Premium one-time purchase",
+                        "oneTimePurchaseOfferDetails": {
+                            "priceAmountMicros": ${MODIFIED_PRICE_MICRO.toLong()},
+                            "priceCurrencyCode": "USD",
+                            "formattedPrice": "$${MODIFIED_PRICE}"
+                        }
+                    }
+                    """.trimIndent()
+                }
+            }
         }
     }
-
 }

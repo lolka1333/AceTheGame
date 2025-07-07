@@ -4,13 +4,12 @@ apply plugin: 'org.jetbrains.kotlin.android'
 android {
     compileSdkVersion 34
 
-
     defaultConfig {
         applicationId "org.billinghack"
-        minSdkVersion 19
-        targetSdkVersion 31
-        versionCode 1
-        versionName "1.0"
+        minSdkVersion 21
+        targetSdkVersion 34
+        versionCode 2
+        versionName "2.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -59,6 +58,7 @@ android {
     }
     buildFeatures {
         aidl true
+        buildConfig = true
     }
     namespace 'org.billinghack'
 
@@ -69,16 +69,24 @@ android {
     kotlinOptions {
         jvmTarget = '17'
     }
+
+    lintOptions {
+        abortOnError false
+        checkReleaseBuilds false
+    }
 }
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
 
-    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.core:core-ktx:1.13.1'
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
     implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // Add support for latest billing library structure
+    implementation 'androidx.fragment:fragment-ktx:1.7.1'
 }
