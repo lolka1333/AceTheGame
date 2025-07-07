@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -31,6 +32,11 @@ import com.kuhakupixel.atg.ui.util.CreateTable
 import com.kuhakupixel.libuberalles.overlay.OverlayContext
 import com.kuhakupixel.libuberalles.overlay.service.dialog.OverlayInfoDialog
 import com.kuhakupixel.atg.ui.OverlayInputDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.TimeUnit
 
 /**
  * which process we are currently attached to?
@@ -51,7 +57,7 @@ enum class ProcessDisplayMode {
  */
 private var processDisplayMode: MutableState<ProcessDisplayMode> = mutableStateOf(ProcessDisplayMode.FULL_NAME)
 
-private fun AttachToProcess(
+private suspend fun AttachToProcess(
     ace: ACE?,
     pid: Long,
     onProcessNoExistAnymore: () -> Unit,
@@ -64,45 +70,66 @@ private fun AttachToProcess(
     }
 
     try {
-        // check if its still alive
-        if (!ace.IsPidRunning(pid)) {
-            onProcessNoExistAnymore()
-            return
-        }
-        
-        // DeAttach first if we have been attached previously
-        if (ace.IsAttached()) {
-            try {
-                ace.DeAttach()
-            } catch (e: Exception) {
-                android.util.Log.w("ATG", "Failed to detach from previous process: ${e.message}")
-                // Continue anyway, try to attach to new process
+        // Perform all heavy operations in background thread
+        withContext(Dispatchers.IO) {
+            android.util.Log.d("ATG", "Starting attach process for PID: $pid")
+            
+            // check if its still alive
+            if (!ace.IsPidRunning(pid)) {
+                withContext(Dispatchers.Main) {
+                    onProcessNoExistAnymore()
+                }
+                return@withContext
             }
-        }
-        
-        // attach
-        try {
-            ace.Attach(pid)
-        } catch (e: Exception) {
-            onAttachFailure("Failed to attach to process $pid: ${e.message}")
-            return
-        }
-        
-        // Verify attachment
-        var attachedPid: Long = -1
-        try {
-            attachedPid = ace.GetAttachedPid()
-        } catch (e: Exception) {
-            onAttachFailure("Unable to verify attachment to process $pid: ${e.message}")
-            return
-        }
-        
-        // final check to see if we are attached
-        // to the correct process
-        if (attachedPid == pid) {
-            onAttachSuccess()
-        } else {
-            onAttachFailure("Attachment verification failed: expected PID $pid, but got $attachedPid")
+            
+            // DeAttach first if we have been attached previously
+            if (ace.IsAttached()) {
+                try {
+                    android.util.Log.d("ATG", "Detaching from previous process")
+                    ace.DeAttach()
+                } catch (e: Exception) {
+                    android.util.Log.w("ATG", "Failed to detach from previous process: ${e.message}")
+                    // Continue anyway, try to attach to new process
+                }
+            }
+            
+            // attach - this is the heavy operation that can take time
+            try {
+                android.util.Log.d("ATG", "Attaching to process $pid...")
+                ace.Attach(pid)
+                android.util.Log.d("ATG", "Successfully attached to process $pid")
+            } catch (e: Exception) {
+                android.util.Log.e("ATG", "Failed to attach to process $pid: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    onAttachFailure("Failed to attach to process $pid: ${e.message}")
+                }
+                return@withContext
+            }
+            
+            // Verify attachment
+            var attachedPid: Long = -1
+            try {
+                attachedPid = ace.GetAttachedPid()
+                android.util.Log.d("ATG", "Verified attachment to PID: $attachedPid")
+            } catch (e: Exception) {
+                android.util.Log.e("ATG", "Unable to verify attachment to process $pid: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    onAttachFailure("Unable to verify attachment to process $pid: ${e.message}")
+                }
+                return@withContext
+            }
+            
+            // final check to see if we are attached
+            // to the correct process
+            if (attachedPid == pid) {
+                withContext(Dispatchers.Main) {
+                    onAttachSuccess()
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    onAttachFailure("Attachment verification failed: expected PID $pid, but got $attachedPid")
+                }
+            }
         }
         
     } catch (e: Exception) {
@@ -317,41 +344,97 @@ fun ProcessMenu(globalConf: GlobalConf?, overlayContext: OverlayContext?) {
     val ace: ACE = globalConf?.getAce()!!
     // list of processes that are gonna be shown
     val currentProcList = remember { SnapshotStateList<ProcInfo>() }
-    //
+    val coroutineScope = rememberCoroutineScope()
+    
+    // State for tracking if attach is in progress
+    val isAttachInProgress = remember { mutableStateOf(false) }
+    
     // initialize the list first
     refreshProcList(ace, currentProcList)
     //
     _ProcessMenu(
         currentProcList,
         onAttach = { pid: Long, procName: String ->
+            // Check if attach is already in progress
+            if (isAttachInProgress.value) {
+                OverlayInfoDialog(overlayContext!!).show(
+                    title = "Attach already in progress",
+                    text = "Please wait for the current attach operation to complete.",
+                    onConfirm = {},
+                )
+                return@_ProcessMenu
+            }
+            
             OverlayInfoDialog(overlayContext!!).show(
                 title = "Attach to ${pid} - ${procName} ? ", text = "",
                 onConfirm = {
-                    AttachToProcess(
-                        ace = ace, pid = pid,
-                        onAttachSuccess = {
+                    // Set attach in progress flag
+                    isAttachInProgress.value = true
+                    
+                    // Show immediate status update
+                    attachedStatusString.value = "Attaching to ${pid} - ${procName}..."
+                    
+                    // Launch attach operation in background with timeout
+                    coroutineScope.launch {
+                        try {
+                            // Set timeout to 30 seconds for attach operation
+                            val result = withTimeoutOrNull(30000) {
+                                AttachToProcess(
+                                    ace = ace, pid = pid,
+                                    onAttachSuccess = {
+                                        // Show success dialog
+                                        OverlayInfoDialog(overlayContext).show(
+                                            title = "Attaching to ${procName} is successful",
+                                            onConfirm = {},
+                                            text = "",
+                                        )
+                                        attachedStatusString.value = "${pid} - ${procName}"
+                                        isAttachInProgress.value = false
+                                    },
+                                    onProcessNoExistAnymore = {
+                                        OverlayInfoDialog(overlayContext).show(
+                                            title = "Process ${procName} is not running anymore, Can't attach",
+                                            onConfirm = {},
+                                            text = "",
+                                        )
+                                        attachedStatusString.value = "None"
+                                        isAttachInProgress.value = false
+                                    },
+                                    onAttachFailure = { msg: String ->
+                                        OverlayInfoDialog(overlayContext).show(
+                                            title = "Attach Failed",
+                                            text = msg,
+                                            onConfirm = {},
+                                        )
+                                        attachedStatusString.value = "None"
+                                        isAttachInProgress.value = false
+                                    },
+                                )
+                            }
+                            
+                            // Check if operation timed out
+                            if (result == null) {
+                                android.util.Log.e("ATG", "Attach operation timed out after 30 seconds")
+                                OverlayInfoDialog(overlayContext).show(
+                                    title = "Attach Timeout",
+                                    text = "The attach operation timed out after 30 seconds. The process may be unresponsive or the system may be overloaded.",
+                                    onConfirm = {},
+                                )
+                                attachedStatusString.value = "None"
+                                isAttachInProgress.value = false
+                            }
+                        } catch (e: Exception) {
+                            // Handle any coroutine exceptions
+                            android.util.Log.e("ATG", "Coroutine exception in attach: ${e.message}", e)
                             OverlayInfoDialog(overlayContext).show(
-                                title = "Attaching to ${procName} is successful",
+                                title = "Attach Failed",
+                                text = "Unexpected error: ${e.message}",
                                 onConfirm = {},
-                                text = "",
                             )
-                            attachedStatusString.value = "${pid} - ${procName}"
-                        },
-                        onProcessNoExistAnymore = {
-                            OverlayInfoDialog(overlayContext).show(
-                                title = "Process ${procName} is not running anymore, Can't attach",
-                                onConfirm = {},
-                                text = "",
-                            )
-                        },
-                        onAttachFailure = { msg: String ->
-                            OverlayInfoDialog(overlayContext).show(
-                                title = msg,
-                                onConfirm = {},
-                                text = "",
-                            )
-                        },
-                    )
+                            attachedStatusString.value = "None"
+                            isAttachInProgress.value = false
+                        }
+                    }
                 },
             )
         },
